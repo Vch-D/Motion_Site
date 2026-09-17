@@ -120,6 +120,11 @@ drop trigger if exists projects_touch on public.projects;
 create trigger projects_touch before update on public.projects
   for each row execute function public.touch_updated_at();
 
+-- ---------- table privileges (row level security below still decides which rows a user sees) ----------
+grant usage on schema public to authenticated, anon, service_role;
+grant select, insert, update, delete on all tables in schema public to authenticated, service_role;
+alter default privileges in schema public grant select, insert, update, delete on tables to authenticated, service_role;
+
 -- ---------- row level security ----------
 alter table public.profiles      enable row level security;
 alter table public.projects      enable row level security;
