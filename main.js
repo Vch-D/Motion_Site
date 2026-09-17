@@ -64,7 +64,7 @@ const CONFIG = {
     clientsOut: [6.05, 6.7],                      // clients slides up and out
     contact: [6.1, 6.95],                         // contact screen rises here
     head: { pos: [0.05, 1.28, 0], rot: [0.06, -0.3, -0.04], scale: 0.62 },   // where the logo settles (world units)
-    text: { lines: ['FROM', 'VISION', 'TO', 'MOTION'], font: '300 380px Inter, "Helvetica Neue", Arial, sans-serif', lineHeight: 0.92, size: 4.3, y: -0.05, z: -0.7 },
+    text: { lines: ['FROM', 'VISION', 'TO', 'MOTION'], font: '300 380px Inter, "Helvetica Neue", Arial, sans-serif', lineHeight: 0.92, size: 4.3, y: -0.05, z: 0.6, opacity: 0.86 },
     ribbons: [                                    // the liquid stream: three intertwined chrome ribbons
       { width: 0.90, radius: 0.36, x: -0.16, z:  0.05, phase: 0.0 },   // in front of the headline
       { width: 0.56, radius: 0.26, x:  0.30, z:  0.30, phase: 2.1 },   // in front
@@ -75,7 +75,7 @@ const CONFIG = {
       color: 0xd2d2d8, metalness: 1, roughness: 0.07,
       clearcoat: 1, clearcoatRoughness: 0.05,
       envMapIntensity: 1.8, iridescence: 0.5, iridescenceIOR: 1.4, iridescenceThicknessRange: [120, 500],
-      transparent: true, opacity: 0.5, depthWrite: false,
+      transparent: true, opacity: 0.72, depthWrite: false,
     },
   },
 };
@@ -581,6 +581,22 @@ scene.add(keyLight, rimLight);
 let introStart = -1;
 let logoReady = false;
 const material = new THREE.MeshPhysicalMaterial(CONFIG.material);
+// Melt: a line rises through the model; everything below it sags into drips that thin out and fall into the stream
+material.userData.melt = { uMelt: { value: 0 }, uTime: { value: 0 }, uYMin: { value: -0.5 }, uYMax: { value: 0.5 }, uCx: { value: 0 }, uCz: { value: 0 } };
+material.onBeforeCompile = shader => {
+  Object.assign(shader.uniforms, material.userData.melt);
+  shader.vertexShader = 'uniform float uMelt, uTime, uYMin, uYMax, uCx, uCz;\n' + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+    if (uMelt > 0.0) {
+      float H = uYMax - uYMin;
+      float t = (transformed.y - uYMin) / H;                 // 0 bottom .. 1 top
+      float d = max(0.0, uMelt * 1.35 - t);                  // how far below the melt line
+      float pinch = clamp(1.0 - d * 0.8, 0.0, 1.0);
+      transformed.x = uCx + (transformed.x - uCx) * pinch;
+      transformed.z = uCz + (transformed.z - uCz) * pinch;
+      transformed.x += 0.035 * H * sin(t * 40.0 + uTime * 3.0) * min(1.0, d * 2.0);
+      transformed.y -= d * d * H * (1.6 + 0.6 * sin((transformed.x - uCx) * 30.0 / H + uTime * 2.0));
+    }`);
+};
 const logo = new THREE.Group();
 scene.add(logo);
 let fitScale = 1;
@@ -826,20 +842,21 @@ Promise.race([document.fonts.load(headlineFont), new Promise(r => setTimeout(r, 
 const tmpColor = new THREE.Color();
 function updateMenuScene(t, g, c) {
   // g: liquid formed (0..1), c: pour amount (0..1): the stream pours down and fades while the next screen rises
-  stream.visible = g > 0.01 && c < 0.98;
+  stream.visible = g > 0.03 && c < 0.98;
   if (stream.visible) {
-    liquid.opacity = MENU.liquid.opacity * (1 - smooth(0.5, 0.95, c));
+    liquid.opacity = MENU.liquid.opacity * smooth(0.1, 0.55, g) * (1 - smooth(0.5, 0.95, c));
     const flow = t + 3.0 * c;                              // runs faster while leaving
+    const grow = smooth(0.08, 0.9, g), width = 0.3 + 0.7 * smooth(0.15, 0.85, g);
     for (const r of ribbons) {
       updateRibbon(r, flow, g);
       r.position.set(r.userData.x * g, MENU.streamTop - 2.8 * c, r.userData.z * g);
-      r.scale.y = 0.05 + 0.95 * g;
+      r.scale.set(width, 0.02 + 0.98 * (1 - (1 - grow) * (1 - grow)), 1);
     }
   }
   if (textPlane) {
-    textPlane.visible = g > 0.3 && c < 0.6;
-    const k = smooth(0.3, 0.8, g) * (1 - smooth(0.1, 0.55, c));   // fades from page-light to ink, and back out
-    textPlane.material.color.copy(tmpColor.setRGB(1.25, 1.25, 1.3).lerp(new THREE.Color(0, 0, 0), k));
+    const k = smooth(0.3, 0.8, g) * (1 - smooth(0.1, 0.55, c));   // fades in over the stream, and back out
+    textPlane.visible = k > 0.01;
+    textPlane.material.opacity = MENU.text.opacity * k;
   }
 }
 
@@ -946,13 +963,16 @@ function poseLogo(now) {
     px = lerp(px, Hd.pos[0], g);
     py = lerp(py, Hd.pos[1], g);
     sc = lerp(sc, fitScale * Hd.scale, g);
-    const op = 1 - smooth(0.3, 0.85, g);
+    const op = 1 - smooth(0.62, 0.92, g);
     material.opacity = op; material.transparent = op < 0.999;
     logo.visible = op > 0.005;
-    logo.scale.set(sc * (1 - 0.4 * g), sc * (1 + 1.1 * g), sc * (1 - 0.4 * g));
+    logo.scale.setScalar(sc);
+    material.userData.melt.uMelt.value = smooth(0.04, 0.82, g);
+    material.userData.melt.uTime.value = t;
   } else {
     material.opacity = 1; material.transparent = false; logo.visible = true;
     logo.scale.setScalar(sc);
+    material.userData.melt.uMelt.value = 0;
   }
   logo.rotation.set(rx, ry, rz);
   logo.position.set(px, py, 0);
