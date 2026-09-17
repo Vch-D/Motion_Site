@@ -120,26 +120,22 @@ body {
   color: var(--ink);
   text-shadow: 0 0 .1em rgba(255, 255, 255, .35);
   visibility: hidden;
-  will-change: transform, filter, opacity;
-  --m: 200%;     /* mask edge, % of the word width (set by main.js) */
+  will-change: transform, opacity;
   --split: 1;    /* aberration multiplier (set by main.js) */
 }
 .word.is-rest, .word.is-out, .word.is-in { visibility: visible; }
-/* leaving word: cut away from the left as it dissolves (clip-path is far cheaper than a gradient mask) */
-.word.is-out { clip-path: inset(-20% 0 -20% clamp(0%, var(--m), 100%)); }
-/* arriving word: revealed from the left as it assembles */
-.word.is-in { clip-path: inset(-20% calc(100% - clamp(0%, var(--m), 100%)) -20% 0); }
-/* RGB-split copies behind the black letters: warm to the left, cool to the right. Horizontal only. */
-.word::before, .word::after {
-  content: attr(data-text); position: absolute; inset: 0; padding: inherit; z-index: -1;
-  will-change: transform;
-}
-.word::before {
+/* Each letter is its own small layer: during a change the letters leave / arrive one by one
+   (opacity + transform + a light blur), so there is no hard cut and no heavy full-word masks. */
+.word { font-kerning: none; }
+.ch { position: relative; display: inline-block; isolation: isolate; will-change: transform, opacity, filter; }
+/* RGB-split copies behind each black letter: warm to the left, cool to the right. Horizontal only. */
+.ch::before, .ch::after { content: attr(data-ch); position: absolute; left: 0; top: 0; z-index: -1; }
+.ch::before {
   color: var(--warm);
   transform: translate3d(calc(-.006em * (var(--split) + var(--ab) * 1.5)), 0, 0);
   text-shadow: -.015em 0 .05em rgba(255, 110, 40, .6), -.03em 0 .2em rgba(255, 150, 80, .25);
 }
-.word::after {
+.ch::after {
   color: var(--cool);
   transform: translate3d(calc(.006em * (var(--split) + var(--ab) * 1.5)), 0, 0);
   text-shadow: .015em 0 .05em rgba(60, 170, 255, .6), .03em 0 .2em rgba(90, 170, 255, .25);

@@ -45,7 +45,7 @@ const CONFIG = {
     maxHeight: 0.6,     // ...but its font size is capped at this fraction of the viewport height
     shift: 0.3,         // how far (fraction of vw) a word slides during a change
     dwell: 0.2,         // last 20% of each scrolled screen: the word stays still
-    blur: 7,            // px of blur at the peak of a change
+    blur: 6,            // px of blur on a letter as it leaves / arrives
   },
   dust: {
     stride: 58,         // font-size px per particle (smaller = denser)
@@ -332,6 +332,7 @@ const samp = document.createElement('canvas');
 const sctx = samp.getContext('2d', { willReadFrequently: true });
 const wordStyle = getComputedStyle(WORDS[0]);
 const fontString = px => `${wordStyle.fontWeight} ${px}px ${wordStyle.fontFamily}`;
+if ('fontKerning' in sctx) sctx.fontKerning = 'none';
 const COLORS = ['#0c0c0e', '#ff5a1f', '#2fb4ff'];
 
 const layout = { vw: 0, vh: 0, dpr: 1, ready: false, words: [] };
@@ -344,8 +345,14 @@ function wordState(p) {
   return { k, f };
 }
 
+function splitLetters(el) {
+  if (el.dataset.split) return;
+  el.innerHTML = [...el.dataset.text].map(c => c === ' ' ? '<span class="ch sp">&nbsp;</span>' : `<span class="ch" data-ch="${c}">${c}</span>`).join('');
+  el.dataset.split = '1';
+}
 function fitWords() {
   const { vw, vh } = layout;
+  WORDS.forEach(splitLetters);
   const maxW = vw * (vw < 640 ? CONFIG.text.widthMobile : CONFIG.text.width);
   const maxFs = vh * CONFIG.text.maxHeight;
   sctx.font = fontString(100);
@@ -362,6 +369,7 @@ function buildParticles() {
   const dist = vw * CONFIG.dust.spread;
   layout.words = WORDS.map((el, i) => {
     const rect = SLOTS[i].getBoundingClientRect();
+    el._letters = [...el.querySelectorAll('.ch')].map(ch => ({ el: ch, nx: (ch.offsetLeft + ch.offsetWidth / 2 - 0.08 * parseFloat(el.style.fontSize)) / Math.max(1, rect.width - 0.16 * parseFloat(el.style.fontSize)) }));
     const fs = parseFloat(el.style.fontSize);
     const padX = 0.08 * fs, padY = 0.12 * fs;
     sctx.clearRect(0, 0, vw, vh);
@@ -403,30 +411,42 @@ function buildParticles() {
   });
 }
 
+// Letters leave / arrive one by one as the dissolve front (same timing as the dust) passes them
+function setLetters(el, mode, f) {
+  const letters = el._letters || [], fs = parseFloat(el.style.fontSize) || 100, B = CONFIG.text.blur;
+  const front = mode === 'out' ? f / 0.85 : (f - 0.12) / 0.85;          // 0..1 across the word
+  for (const { el: ch, nx } of letters) {
+    let g = 0;                                                            // 0 = intact, 1 = gone / not yet here
+    if (mode === 'out') g = clamp((front - nx + 0.07) / 0.14, 0, 1);
+    else if (mode === 'in') g = clamp((nx - front + 0.07) / 0.14, 0, 1);
+    const st = ch.style;
+    if (g <= 0) { st.opacity = ''; st.transform = ''; st.filter = ''; continue; }
+    const dir = mode === 'out' ? -1 : 1;
+    st.opacity = (1 - g).toFixed(3);
+    st.transform = `translate3d(${(dir * g * 0.22 * fs).toFixed(1)}px, ${(-g * g * 0.06 * fs).toFixed(1)}px, 0) scale(${(1 - 0.3 * g).toFixed(3)})`;
+    st.filter = g > 0.02 ? `blur(${(g * B).toFixed(2)}px)` : '';
+  }
+}
 function setWord(i, mode, f) {
   const el = WORDS[i], st = el.style;
   el.classList.toggle('is-rest', mode === 'rest');
   el.classList.toggle('is-out', mode === 'out');
   el.classList.toggle('is-in', mode === 'in');
   if (mode === 'hidden' || mode === 'rest') {
-    st.transform = ''; st.filter = ''; st.opacity = '';
-    st.setProperty('--m', '200%'); st.setProperty('--split', '1');
+    st.transform = ''; st.opacity = ''; st.setProperty('--split', '1');
+    setLetters(el, 'rest', 0);
     return;
   }
-  const S = layout.vw * CONFIG.text.shift, B = CONFIG.text.blur, ab = scroll.ab * 6;
+  const S = layout.vw * CONFIG.text.shift;
   if (mode === 'out') {
     st.transform = `translate3d(${(-S * f).toFixed(1)}px,0,0) scale(${(1 - 0.15 * f).toFixed(4)})`;
-    st.filter = `blur(${Math.min(8, 1 + B * f * f + ab).toFixed(2)}px)`;
-    st.opacity = (1 - smooth(0.7, 1, f)).toFixed(3);
-    st.setProperty('--m', `${(f / 0.85 * 100).toFixed(2)}%`);
     st.setProperty('--split', (1 + 1.5 * f).toFixed(3));
   } else {
     st.transform = `translate3d(${(S * (1 - f)).toFixed(1)}px,0,0) scale(${(0.85 + 0.15 * f).toFixed(4)})`;
-    st.filter = `blur(${Math.min(8, B * (1 - f) * (1 - f) + ab).toFixed(2)}px)`;
-    st.opacity = smooth(0, 0.25, f).toFixed(3);
-    st.setProperty('--m', `${((f - 0.12) / 0.85 * 100).toFixed(2)}%`);
     st.setProperty('--split', (1 + 1.5 * (1 - f)).toFixed(3));
   }
+  st.opacity = '';
+  setLetters(el, mode, f);
 }
 
 function applyWords(k, f) {
