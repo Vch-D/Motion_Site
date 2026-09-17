@@ -117,7 +117,7 @@ const store = {
   async afterSignIn() {
     const { data: { user } } = await this.sb.auth.getUser();
     if (!user) return;
-    await this.sb.rpc('ensure_profile').catch(() => {});
+    try { await this.sb.rpc('ensure_profile'); } catch (e) { /* profile may already exist */ }
     try { await this.fetchAll(); } catch (e) {
       this.error = 'The database is not set up yet: run supabase/schema.sql in the Supabase SQL editor. (' + (e.message || e) + ')';
       await this.sb.auth.signOut(); this.meUser = null; return;
@@ -167,10 +167,13 @@ const store = {
   async login(login, pass) {
     if (REMOTE) {
       this.error = null;
-      const { error } = await this.sb.auth.signInWithPassword({ email: String(login).trim(), password: pass });
-      if (error) return { error: error.message };
-      await this.afterSignIn();
-      return this.meUser ? { ok: true } : { error: this.error || 'Could not load your workspace' };
+      try {
+        const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('The backend did not answer in 25 s. Check your connection and try again.')), 25000));
+        const { error } = await Promise.race([this.sb.auth.signInWithPassword({ email: String(login).trim(), password: pass }), timeout]);
+        if (error) return { error: error.message };
+        await Promise.race([this.afterSignIn(), timeout]);
+        return this.meUser ? { ok: true } : { error: this.error || 'Could not load your workspace' };
+      } catch (e) { return { error: 'Sign-in failed: ' + (e.message || e) }; }
     }
     const u = this.data.users.find(u => u.login.toLowerCase() === String(login).trim().toLowerCase() && u.pass === pass);
     if (!u) return { error: 'Wrong login or password.' };
@@ -692,7 +695,8 @@ root.addEventListener('submit', async e => {
   const f = e.target; const me = store.me();
   if (f.id === 'pm-login-form') {
     e.preventDefault(); const fd = new FormData(f); const btn = f.querySelector('button'); btn.disabled = true; btn.textContent = 'Signing in…';
-    const r = await store.login(fd.get('login'), fd.get('pass'));
+    let r;
+    try { r = await store.login(fd.get('login'), fd.get('pass')); } catch (err) { r = { error: 'Sign-in failed: ' + (err.message || err) }; }
     if (r.ok) { go('#manager/projects'); route(); } else { btn.disabled = false; btn.textContent = 'Sign in'; $('#pm-login-error').textContent = r.error; }
     return;
   }
