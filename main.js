@@ -45,7 +45,7 @@ const CONFIG = {
     maxHeight: 0.6,     // ...but its font size is capped at this fraction of the viewport height
     shift: 0.3,         // how far (fraction of vw) a word slides during a change
     dwell: 0.2,         // last 20% of each scrolled screen: the word stays still
-    blur: 12,           // px of blur at the peak of a change
+    blur: 7,            // px of blur at the peak of a change
   },
   dust: {
     stride: 58,         // font-size px per particle (smaller = denser)
@@ -416,13 +416,13 @@ function setWord(i, mode, f) {
   const S = layout.vw * CONFIG.text.shift, B = CONFIG.text.blur, ab = scroll.ab * 6;
   if (mode === 'out') {
     st.transform = `translate3d(${(-S * f).toFixed(1)}px,0,0) scale(${(1 - 0.15 * f).toFixed(4)})`;
-    st.filter = `blur(${(1 + B * f * f + ab).toFixed(2)}px)`;
+    st.filter = `blur(${Math.min(8, 1 + B * f * f + ab).toFixed(2)}px)`;
     st.opacity = (1 - smooth(0.7, 1, f)).toFixed(3);
     st.setProperty('--m', `${(f / 0.85 * 100).toFixed(2)}%`);
     st.setProperty('--split', (1 + 1.5 * f).toFixed(3));
   } else {
     st.transform = `translate3d(${(S * (1 - f)).toFixed(1)}px,0,0) scale(${(0.85 + 0.15 * f).toFixed(4)})`;
-    st.filter = `blur(${(B * (1 - f) * (1 - f) + ab).toFixed(2)}px)`;
+    st.filter = `blur(${Math.min(8, B * (1 - f) * (1 - f) + ab).toFixed(2)}px)`;
     st.opacity = smooth(0, 0.25, f).toFixed(3);
     st.setProperty('--m', `${((f - 0.12) / 0.85 * 100).toFixed(2)}%`);
     st.setProperty('--split', (1 + 1.5 * (1 - f)).toFixed(3));
@@ -491,7 +491,7 @@ function relayout() {
     return;
   }
   layout.vw = innerWidth; layout.vh = innerHeight;
-  layout.dpr = Math.min(devicePixelRatio || 1, 2);
+  layout.dpr = Math.min(devicePixelRatio || 1, 1.5);
   sectionH = sections[0].getBoundingClientRect().height || innerHeight || 1;
   dust.width = Math.round(layout.vw * layout.dpr);
   dust.height = Math.round(layout.vh * layout.dpr);
@@ -519,7 +519,10 @@ if (document.fonts) document.fonts.addEventListener('loadingdone', () => { if (l
    ========================================================================= */
 const canvas = document.getElementById('logo3d');
 const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, innerWidth < 640 ? 1.5 : 2));
+// Quality tiers: start at 1.5x pixels (2x is not worth the GPU cost here); step down automatically if frames get slow
+const QUALITY = { tiers: [{ dpr: 1.5, taps: 4 }, { dpr: 1.25, taps: 4 }, { dpr: 1.0, taps: 3 }], tier: 0, ema: 16, slowFrames: 0 };
+QUALITY.tier = Math.min(2, +(localStorage.getItem('site.quality') || (innerWidth < 640 ? 1 : 0)));
+renderer.setPixelRatio(Math.min(devicePixelRatio, QUALITY.tiers[QUALITY.tier].dpr));
 renderer.setClearColor(0x000000, 0);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
@@ -822,24 +825,30 @@ function updateMenuScene(t, g, c) {
 
 // ---- post-processing: horizontal RGB split (left/right fringes only) + motion smear while scrolling ----
 const ChromaticAberrationShader = {
-  uniforms: { tDiffuse: { value: null }, uSplit: { value: CONFIG.aberration.base }, uSmear: { value: 0 } },
+  uniforms: { tDiffuse: { value: null }, uSplit: { value: CONFIG.aberration.base }, uSmear: { value: 0 }, uTaps: { value: 4 } },
   vertexShader: /* glsl */`
     varying vec2 vUv;
     void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: /* glsl */`
-    uniform sampler2D tDiffuse; uniform float uSplit; uniform float uSmear; varying vec2 vUv;
-    const int N = 8;
+    uniform sampler2D tDiffuse; uniform float uSplit; uniform float uSmear; uniform int uTaps; varying vec2 vUv;
     void main() {
+      vec2 s = vec2(uSplit, 0.0);
+      if (uSmear < 0.0004) {                                   // at rest: one sample per channel
+        vec4 r = texture2D(tDiffuse, vUv + s), g = texture2D(tDiffuse, vUv), b = texture2D(tDiffuse, vUv - s);
+        gl_FragColor = vec4(r.r, g.g, b.b, (r.a + g.a + b.a) / 3.0);
+        return;
+      }
       vec3 c = vec3(0.0); float a = 0.0;
-      for (int i = 0; i < N; i++) {
-        vec2 o = vec2((float(i) / float(N - 1) - 0.5) * uSmear, 0.0);
-        vec4 r = texture2D(tDiffuse, vUv + vec2(uSplit, 0.0) + o);
+      for (int i = 0; i < 8; i++) {
+        if (i >= uTaps) break;
+        vec2 o = vec2((float(i) / float(uTaps - 1) - 0.5) * uSmear, 0.0);
+        vec4 r = texture2D(tDiffuse, vUv + s + o);
         vec4 g = texture2D(tDiffuse, vUv + o);
-        vec4 b = texture2D(tDiffuse, vUv - vec2(uSplit, 0.0) + o);
+        vec4 b = texture2D(tDiffuse, vUv - s + o);
         c += vec3(r.r, g.g, b.b);
         a += (r.a + g.a + b.a) / 3.0;
       }
-      gl_FragColor = vec4(c, a) / float(N);
+      gl_FragColor = vec4(c, a) / float(uTaps);
     }`,
 };
 const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
@@ -864,7 +873,14 @@ function resize3d() {
   if (textPlane) textPlane.scale.setScalar(k);
 }
 new ResizeObserver(resize3d).observe(canvas);
-resize3d();
+function applyQuality() {
+  const q = QUALITY.tiers[QUALITY.tier];
+  renderer.setPixelRatio(Math.min(devicePixelRatio, q.dpr));
+  composer.setPixelRatio(renderer.getPixelRatio());
+  caPass.uniforms.uTaps.value = q.taps;
+  resize3d();
+}
+applyQuality();
 
 /* =========================================================================
    Ready / intro
@@ -957,6 +973,16 @@ function tick(now) {
   }
 
   if (document.body.classList.contains('pm-open')) return;   // the manager covers the site: skip rendering
+
+  // adaptive quality: sustained slow frames step the 3D resolution down (remembered for next visits)
+  if (!document.hidden && now > 4000) {
+    QUALITY.ema += (dt * 1000 - QUALITY.ema) * 0.1;
+    if (QUALITY.ema > 26 && moving) { if (++QUALITY.slowFrames > 45 && QUALITY.tier < QUALITY.tiers.length - 1) { QUALITY.tier++; QUALITY.slowFrames = 0; localStorage.setItem('site.quality', QUALITY.tier); applyQuality(); } }
+    else QUALITY.slowFrames = Math.max(0, QUALITY.slowFrames - 1);
+  }
+  // at rest (no scroll, still mouse, no liquid stream) the idle wobble only needs 30 fps
+  const still = !moving && Math.abs(mouse.tx - mouse.x) < 0.002 && Math.abs(mouse.ty - mouse.y) < 0.002 && !stream.visible;
+  if (still && frames % 2) return;
   poseLogo(now);
   composer.render();
 }
@@ -964,7 +990,7 @@ requestAnimationFrame(tick);
 
 // Debug handle (harmless in production): tweak CONFIG / material live from the console
 window.__site = {
-  scroll, CONFIG, logo, material, caPass, layout, relayout,
+  scroll, CONFIG, logo, material, caPass, layout, relayout, QUALITY,
   get frames() { return frames; },
   // jump straight to scroll progress p (0..3) and draw that state now
   lock: false,
