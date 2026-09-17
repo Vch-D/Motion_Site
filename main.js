@@ -589,7 +589,7 @@ material.onBeforeCompile = shader => {
     if (uMelt > 0.0) {
       float H = uYMax - uYMin;
       float t = (transformed.y - uYMin) / H;                 // 0 bottom .. 1 top
-      float d = max(0.0, uMelt * 1.35 - t);                  // how far below the melt line
+      float d = max(0.0, uMelt * 2.3 - t);                   // how far below the melt line (reaches the top at ~45%)
       float pinch = clamp(1.0 - d * 0.8, 0.0, 1.0);
       transformed.x = uCx + (transformed.x - uCx) * pinch;
       transformed.z = uCz + (transformed.z - uCz) * pinch;
@@ -844,9 +844,9 @@ function updateMenuScene(t, g, c) {
   // g: liquid formed (0..1), c: pour amount (0..1): the stream pours down and fades while the next screen rises
   stream.visible = g > 0.03 && c < 0.98;
   if (stream.visible) {
-    liquid.opacity = MENU.liquid.opacity * smooth(0.1, 0.55, g) * (1 - smooth(0.5, 0.95, c));
+    liquid.opacity = MENU.liquid.opacity * smooth(0.18, 0.7, g) * (1 - smooth(0.5, 0.95, c));   // the drips arrive, then the stream builds
     const flow = t + 3.0 * c;                              // runs faster while leaving
-    const grow = smooth(0.08, 0.9, g), width = 0.3 + 0.7 * smooth(0.15, 0.85, g);
+    const grow = smooth(0.1, 0.9, g), width = 0.25 + 0.75 * smooth(0.2, 0.88, g);
     for (const r of ribbons) {
       updateRibbon(r, flow, g);
       r.position.set(r.userData.x * g, MENU.streamTop - 2.8 * c, r.userData.z * g);
@@ -963,11 +963,11 @@ function poseLogo(now) {
     px = lerp(px, Hd.pos[0], g);
     py = lerp(py, Hd.pos[1], g);
     sc = lerp(sc, fitScale * Hd.scale, g);
-    const op = 1 - smooth(0.62, 0.92, g);
-    material.opacity = op; material.transparent = op < 0.999;
-    logo.visible = op > 0.005;
+    // the model melts away geometrically (threads thin to nothing); a long, late fade only cleans up the last threads
+    material.opacity = 1 - smooth(0.86, 0.985, g); material.transparent = true;
+    logo.visible = g < 0.985;
     logo.scale.setScalar(sc);
-    material.userData.melt.uMelt.value = smooth(0.04, 0.82, g);
+    material.userData.melt.uMelt.value = smooth(0.04, 0.9, g);
     material.userData.melt.uTime.value = t;
   } else {
     material.opacity = 1; material.transparent = false; logo.visible = true;
