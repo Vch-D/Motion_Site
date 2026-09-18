@@ -1096,7 +1096,7 @@ let last = performance.now();
 const B = CONFIG.baseRotation, T = CONFIG.tumble;
 const wave = (f, ph, p) => Math.sin(f * p + ph) - Math.sin(ph);   // smooth pseudo-random, zero at p = 0
 
-let frames = 0;
+let frames = 0, lastDraw = 0;
 
 // Logo pose: tumbles through all three axes as you scroll, tilts with speed, floats when idle, follows the mouse
 function poseLogo(now) {
@@ -1195,22 +1195,26 @@ function tick(now) {
     const Q = QUALITY;
     Q.ema += (dt * 1000 - Q.ema) * 0.1;
     if (Q.probe) {
-      if (++Q.probe.n >= 90) {
-        if (Q.ema <= Q.probe.ema * 0.85) {                       // faster: but one window can simply be a lighter stretch of the page
-          if (++Q.probe.ok >= 2) { qStore.set(Q.tier); Q.probe = null; Q.slowFrames = 0; } else Q.probe.n = 0;
-        } else {
-          Q.probe.ok = 0;
-          if (Q.tier < Q.tiers.length - 1) { Q.tier++; Q.probe.n = 0; applyQuality(); }
-          else { Q.tier = Q.probe.from; Q.locked = true; Q.probe = null; applyQuality(); }
+      const P = Q.probe;
+      if (dt * 1000 > P.ema * 0.85) P.slow++;                    // a frame the step down did not shorten
+      if (++P.n >= 90) {
+        const helped = P.slow < 23;                               // under a quarter of the whole window is still slow
+        P.n = P.slow = 0;
+        if (helped) { if (++P.ok >= 2) { qStore.set(Q.tier); Q.probe = null; Q.slowFrames = 0; } }   // twice in a row: not just a lighter stretch of the page
+        else {
+          P.ok = 0;
+          if (Q.tier < Q.tiers.length - 1) { Q.tier++; applyQuality(); }
+          else { Q.tier = P.from; Q.locked = true; Q.probe = null; applyQuality(); }
         }
       }
     } else if (Q.ema > 26) {
-      if (++Q.slowFrames > 45 && Q.tier < Q.tiers.length - 1) { Q.probe = { from: Q.tier, ema: Q.ema, n: 0, ok: 0 }; Q.tier++; Q.slowFrames = 0; applyQuality(); }
+      if (++Q.slowFrames > 45 && Q.tier < Q.tiers.length - 1) { Q.probe = { from: Q.tier, ema: Q.ema, n: 0, slow: 0, ok: 0 }; Q.tier++; Q.slowFrames = 0; applyQuality(); }
     } else Q.slowFrames = Math.max(0, Q.slowFrames - 1);
   }
   // at rest (no scroll, still mouse, no liquid stream) the idle wobble only needs 30 fps
   const still = !moving && Math.abs(mouse.tx - mouse.x) < 0.002 && Math.abs(mouse.ty - mouse.y) < 0.002 && !streamLive;
-  if (still && frames % 2) return;
+  if (still && now - lastDraw < 30) return;                 // by time, not by frame count: also 30 fps on a 120 Hz display
+  lastDraw = now;
   renderScene(now);
 }
 requestAnimationFrame(tick);
