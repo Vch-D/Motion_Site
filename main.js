@@ -128,21 +128,38 @@ const clientsEl = document.querySelector('.clients');
 const clientsTitle = document.querySelector('.clients-title');
 const navWork = document.querySelector('.menu a[href="#work"]'), navContact = document.querySelector('.menu a[href="#contact"]');
 const worksTitle = document.querySelector('.works-title');
+const wordsEl = document.getElementById('words');
+const glowEl = document.querySelector('.logo-glow');
+const introEls = [...document.querySelectorAll('.scroll-hint, .tagline')];
+const menuEls = [...document.querySelectorAll('.side-menu, .note, .scroll-down')];
+// Each variable is written on the element that uses it (not on :root, which would restyle the whole document
+// every frame), and only when its value really changed.
+function setVar(el, name, value) {
+  const seen = el._vars || (el._vars = {});
+  if (seen[name] === value) return;
+  seen[name] = value;
+  el.style.setProperty(name, value);
+}
 function updateCSS() {
-  root.style.setProperty('--p', scroll.current.toFixed(4));
-  root.style.setProperty('--ab', scroll.ab.toFixed(3));
   const p = scroll.current;
+  // consumers saturate outside these ranges, so the clamped value draws the same picture and stops changing sooner
+  const pIntro = clamp(p, 0, 0.4).toFixed(4);
+  for (const el of introEls) setVar(el, '--p', pIntro);
+  setVar(glowEl, '--p', clamp(p, 3, 3.5).toFixed(4));
+  if (p < WORDS.length) setVar(wordsEl, '--ab', scroll.ab.toFixed(3));        // the letters' colour fringes; no letters beyond the last word
   const m = menuAmount(p), wIn = pourAmount(p), wOut = worksOutAmount(p), w = wIn * (1 - wOut);
   const clIn = clientsInAmount(p), clOut = clientsOutAmount(p), cl = clIn * (1 - clOut), c = contactAmount(p);
-  root.style.setProperty('--menu', m.toFixed(3));
-  root.style.setProperty('--works-in', wIn.toFixed(3));
-  root.style.setProperty('--works-out', wOut.toFixed(3));
-  root.style.setProperty('--works', w.toFixed(3));
-  root.style.setProperty('--clients-in', clIn.toFixed(3));
-  root.style.setProperty('--clients-out', clOut.toFixed(3));
-  root.style.setProperty('--clients', cl.toFixed(3));
-  root.style.setProperty('--contact', c.toFixed(3));
+  const mStr = m.toFixed(3);
+  for (const el of menuEls) setVar(el, '--menu', mStr);
+  setVar(worksEl, '--works-in', wIn.toFixed(3));
+  setVar(worksEl, '--works-out', wOut.toFixed(3));
+  setVar(worksEl, '--works', w.toFixed(3));
+  setVar(clientsEl, '--clients-in', clIn.toFixed(3));
+  setVar(clientsEl, '--clients-out', clOut.toFixed(3));
+  setVar(clientsEl, '--clients', cl.toFixed(3));
+  setVar(contactEl, '--contact', c.toFixed(3));
   document.body.classList.toggle('is-menu', m > 0.5);
+  document.body.classList.toggle('menu-live', m > 0.001);     // the menu UI has some opacity: its arrow animation runs
   document.body.classList.toggle('nav-hidden', m > 0.85);     // top-right links go only once the menu is established
   document.body.classList.toggle('is-works', w > 0.5);
   document.body.classList.toggle('is-clients', cl > 0.5);
@@ -179,6 +196,18 @@ document.querySelectorAll('a[href="#manager"]').forEach(a => a.addEventListener(
 /* =========================================================================
    Clients ribbon: drifts left-to-right on its own, pauses on hover, drag / arrows / dots / keys
    ========================================================================= */
+// Floor reflections: each card's content moves into a .refl-face, and a flipped, faded copy (.refl-mirror) goes under it.
+// (Replaces -webkit-box-reflect, which re-runs a GPU filter per card on every frame.)
+function addMirror(card) {
+  const face = document.createElement('div'); face.className = 'refl-face';
+  while (card.firstChild) face.appendChild(card.firstChild);
+  const mirror = face.cloneNode(true); mirror.className = 'refl-mirror';
+  mirror.setAttribute('aria-hidden', 'true'); mirror.inert = true;
+  mirror.querySelectorAll('button, a, input, video').forEach(el => { el.tabIndex = -1; });   // browsers without `inert`
+  card.append(mirror, face);                                        // mirror first: the card's shadow falls over it
+}
+document.querySelectorAll('.work, .client').forEach(addMirror);
+
 const ribbon = document.getElementById('ribbon');
 const clientCards = [...document.querySelectorAll('.client')];
 const clientDots = document.getElementById('clientDots');
@@ -188,12 +217,14 @@ clientCards.forEach((_, i) => {
   const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', 'Client ' + (i + 1));
   b.addEventListener('click', () => ribbonGo(i)); clientDots.appendChild(b);
 });
-function clientWidth() {
+let clientW = 0;                       // measured once per layout (relayout), not per frame: reading a computed style forces a style + layout pass
+function measureClientWidth() {
   const w = parseFloat(getComputedStyle(clientCards[0]).width);
-  if (Number.isFinite(w) && w > 0) return w;
+  if (Number.isFinite(w) && w > 0) { clientW = w; return; }
   const vw = layout.vw || innerWidth;
-  return vw <= 640 ? vw * 0.44 : clamp(vw * (vw <= 900 ? 0.26 : 0.14), 120, 200);
+  clientW = vw <= 640 ? vw * 0.44 : clamp(vw * (vw <= 900 ? 0.26 : 0.14), 120, 200);
 }
+function clientWidth() { if (!clientW) measureClientWidth(); return clientW; }
 function ribbonGo(i) {                 // bring card i to the centre by the shortest way round
   const n = clientCards.length;
   const cur = Math.round(rib.target), k = Math.round((cur - i) / n);
@@ -206,16 +237,21 @@ function layoutRibbon(dt, t) {
     rib.offset = damp(rib.offset, rib.target, 8, dt);
   }
   const halfW = (layout.vw || innerWidth) / 2, cull = halfW + cw;
-  clientCards.forEach((card, i) => {
+  for (let i = 0; i < n; i++) {
+    const card = clientCards[i];
     const x = (((i - rib.offset) * S) % L + L) % L - L / 2;                // wrap around the ring
-    if (Math.abs(x) > cull) { card.style.visibility = 'hidden'; return; }
-    card.style.visibility = '';
+    const hidden = Math.abs(x) > cull;
+    if (card._hidden !== hidden) { card._hidden = hidden; card.style.visibility = hidden ? 'hidden' : ''; }
+    if (hidden) continue;
     const nx = x / halfW, near = Math.max(0, 1 - Math.abs(x) / S);
     card.style.transform = `translateX(${x.toFixed(1)}px) translateY(${(nx * nx * RIB.sag * cw).toFixed(1)}px) rotateY(${(-nx * RIB.yaw).toFixed(2)}deg) rotateZ(${(nx * RIB.tilt).toFixed(2)}deg) scale(${(1 + RIB.bump * near * near).toFixed(3)})`;
-    card.style.zIndex = String(100 - Math.round(Math.abs(nx) * 60));
-  });
+    // nearer the centre = on top. Ranked in half-card steps: the order between neighbours is the same as with a
+    // pixel-based z-index, but the value changes every few seconds instead of ~15 times a second (each change re-sorts the layers)
+    const z = 100 - Math.floor(Math.abs(x) / (S / 2));
+    if (card._z !== z) { card._z = z; card.style.zIndex = String(z); }
+  }
   const idx = ((Math.round(rib.offset) % n) + n) % n;
-  if (idx !== rib.lastIdx) { rib.lastIdx = idx; [...clientDots.children].forEach((b, i) => b.classList.toggle('is-active', i === idx)); }
+  if (idx !== rib.lastIdx) { rib.lastIdx = idx; for (let i = 0; i < n; i++) clientDots.children[i].classList.toggle('is-active', i === idx); }
 }
 clientsEl.querySelector('.cbtn.prev').addEventListener('click', () => { rib.target = Math.round(rib.target) - 1; rib.resumeAt = performance.now() / 1000 + 3; });
 clientsEl.querySelector('.cbtn.next').addEventListener('click', () => { rib.target = Math.round(rib.target) + 1; rib.resumeAt = performance.now() / 1000 + 3; });
@@ -275,12 +311,14 @@ cards.forEach((_, i) => {
 // Cards sit on one cylinder and the whole ring turns, so they can never cut through each other, even mid-turn.
 const ARC = { theta: 14, chord: 0.98, scales: [1, 0.82, 0.62, 0.5, 0.42], dim: 0.12 };
 const track = document.getElementById('carouselTrack');
-function cardWidth() {                       // mirrors --cw in style.css (also resolves while the screen is hidden)
+let cardW = 0;                               // measured once per layout (relayout), see measureClientWidth
+function measureCardWidth() {                // mirrors --cw in style.css (also resolves while the screen is hidden)
   const w = parseFloat(getComputedStyle(cards[0]).width);
-  if (Number.isFinite(w) && w > 0) return w;
+  if (Number.isFinite(w) && w > 0) { cardW = w; return; }
   const vw = layout.vw || innerWidth;
-  return vw <= 640 ? vw * 0.76 : clamp(vw * (vw <= 900 ? 0.6 : 0.31), 200, 460);
+  cardW = vw <= 640 ? vw * 0.76 : clamp(vw * (vw <= 900 ? 0.6 : 0.31), 200, 460);
 }
+function cardWidth() { if (!cardW) measureCardWidth(); return cardW; }
 function layoutCarousel() {
   const cw = cardWidth();
   const R = cw * ARC.chord / (2 * Math.sin(ARC.theta * Math.PI / 360));          // ring radius from the wanted spacing
@@ -366,6 +404,7 @@ function fitWords() {
 function buildParticles() {
   const { vw, vh } = layout;
   samp.width = vw; samp.height = vh;
+  if ('fontKerning' in sctx) sctx.fontKerning = 'none';   // resizing a canvas resets its whole 2D state; keep measuring like the CSS (font-kerning: none)
   const dist = vw * CONFIG.dust.spread;
   layout.words = WORDS.map((el, i) => {
     const rect = SLOTS[i].getBoundingClientRect();
@@ -449,7 +488,11 @@ function setWord(i, mode, f) {
   setLetters(el, mode, f);
 }
 
+let wordsAllHidden = false;
 function applyWords(k, f) {
+  const allHidden = k >= WORDS.length || (k === WORDS.length - 1 && f >= 1);   // past the last word: every word is already hidden
+  if (allHidden && wordsAllHidden) return;
+  wordsAllHidden = allHidden;
   const mid = f > 0 && f < 1;
   for (let i = 0; i < WORDS.length; i++) {
     if (i === k) setWord(i, mid ? 'out' : f >= 1 ? 'hidden' : 'rest', f);
@@ -492,11 +535,15 @@ function drawWordDust(W, mode, f, t) {
   dctx.globalAlpha = 1;
 }
 
+let dustShown = true;
 function drawDust(k, f, t) {
   const { vw, vh, dpr } = layout;
+  const active = f > 0 && f < 1 && k < WORDS.length;      // dust exists only while a word leaves / arrives, not between the later screens
+  if (!active && !dustActive && !dustShown) return;       // already clean and hidden
   dctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   dctx.clearRect(0, 0, vw, vh);
-  dustActive = f > 0 && f < 1;
+  dustActive = active;
+  if (dustShown !== active) { dustShown = active; dust.style.visibility = active ? '' : 'hidden'; }   // an empty full-screen layer still costs blending
   if (!dustActive) return;
   drawWordDust(layout.words[k], 'out', f, t);
   if (CONFIG.dust.assemble && k + 1 < WORDS.length) drawWordDust(layout.words[k + 1], 'in', f, t);
@@ -512,14 +559,18 @@ function relayout() {
   }
   layout.vw = innerWidth; layout.vh = innerHeight;
   layout.dpr = Math.min(devicePixelRatio || 1, 1.5);
+  heroBox = heroBoxNow();
   sectionH = sections[0].getBoundingClientRect().height || innerHeight || 1;
   dust.width = Math.round(layout.vw * layout.dpr);
   dust.height = Math.round(layout.vh * layout.dpr);
+  dustActive = true;                                      // resizing wiped the canvas: let the next frame redraw / hide it
   fitWords();
   fitTitle(contactTitle, 0.82, 0.47);
   fitTitle(worksTitle, 0.64, 0.46);
   fitTitle(clientsTitle, 0.66, 0.46);
   buildParticles();
+  heroSig = heroMetrics();
+  measureCardWidth(); measureClientWidth();
   layoutCarousel();
   layout.ready = true;
   readScroll();
@@ -529,19 +580,47 @@ function relayout() {
 }
 let forceApply = false;
 let resizeTimer = 0;
-addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(relayout, 150); });
-document.addEventListener('visibilitychange', () => { if (!document.hidden) relayout(); });
-// fonts that arrive late (slow network) change the word widths: fit again
-if (document.fonts) document.fonts.addEventListener('loadingdone', () => { if (layout.ready) relayout(); });
+// A phone's URL bar sliding away also fires 'resize', but the hero (100svh) keeps its box: measuring again there would
+// re-scatter every particle in the middle of a word change. Desktop window resizes always change the box.
+const heroEl = document.getElementById('hero');
+let heroBox = '';
+function heroBoxNow() { return `${heroEl.clientWidth}x${heroEl.clientHeight}@${Math.min(devicePixelRatio || 1, 1.5)}`; }
+addEventListener('resize', () => {
+  cardW = clientW = 0;                                   // card widths follow the viewport at once
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (!layout.ready || heroBoxNow() !== heroBox) relayout(); }, 150);
+});
+// back on the tab: measure again only if something changed meanwhile (a relayout rebuilds every particle)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  if (!layout.ready || innerWidth !== layout.vw || innerHeight !== layout.vh || Math.min(devicePixelRatio || 1, 1.5) !== layout.dpr || heroMetrics() !== heroSig) relayout();
+});
+// fonts that arrive late (slow network) change the word widths: fit again. Only then: 'loadingdone' also fires for every
+// unrelated face or subset (a Greek glyph on a client card, Cyrillic in the manager), and a relayout rebuilds all the particles.
+let heroSig = '';
+function heroMetrics() {
+  sctx.font = fontString(100);
+  return [...WORDS, worksTitle, clientsTitle, contactTitle].map(el => sctx.measureText(el.dataset.text).width.toFixed(1)).join();
+}
+if (document.fonts) document.fonts.addEventListener('loadingdone', () => { if (layout.ready && heroMetrics() !== heroSig) relayout(); });
 
 /* =========================================================================
    Three.js: dark chrome logo + horizontal chromatic aberration / smear
    ========================================================================= */
 const canvas = document.getElementById('logo3d');
-const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'high-performance' });
+// The canvas itself only ever receives the full-screen output pass: anti-aliasing happens in the composer's 4x MSAA scene buffer.
+const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false, depth: false, powerPreference: 'high-performance' });
 // Quality tiers: start at 1.5x pixels (2x is not worth the GPU cost here); step down automatically if frames get slow
-const QUALITY = { tiers: [{ dpr: 1.5, taps: 4 }, { dpr: 1.25, taps: 4 }, { dpr: 1.0, taps: 3 }], tier: 0, ema: 16, slowFrames: 0 };
-QUALITY.tier = Math.min(2, +(localStorage.getItem('site.quality') || (innerWidth < 640 ? 1 : 0)));
+const QUALITY = { tiers: [{ dpr: 1.5, taps: 4 }, { dpr: 1.25, taps: 4 }, { dpr: 1.0, taps: 3 }], tier: 0, ema: 16, slowFrames: 0, probe: null, locked: false };
+// The old key ('site.quality') could be ratcheted down for good by lag that had nothing to do with the 3D scene: drop it.
+// The new one is only written after a step down has proved useful, and expires after a week.
+const QKEY = 'site.quality.v2';
+const qStore = {
+  get() { try { const v = JSON.parse(localStorage.getItem(QKEY)); return v && Date.now() - v.t < 7 * 864e5 ? clamp(v.tier | 0, 0, 2) : null; } catch (e) { return null; } },
+  set(tier) { try { localStorage.setItem(QKEY, JSON.stringify({ tier, t: Date.now() })); } catch (e) { /* storage blocked */ } },
+};
+try { localStorage.removeItem('site.quality'); } catch (e) { /* storage blocked */ }
+QUALITY.tier = qStore.get() ?? (innerWidth < 640 ? 1 : 0);
 renderer.setPixelRatio(Math.min(devicePixelRatio, QUALITY.tiers[QUALITY.tier].dpr));
 renderer.setClearColor(0x000000, 0);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -792,40 +871,77 @@ scene.add(stream);
 const ribbons = MENU.ribbons.map(r => {
   const geo = new THREE.PlaneGeometry(r.width, MENU.streamHeight, 18, 150);
   geo.translate(0, -MENU.streamHeight / 2, 0);          // top edge at y = 0
+  geo.attributes.position.setUsage(THREE.DynamicDrawUsage);   // rewritten every frame
+  geo.attributes.normal.setUsage(THREE.DynamicDrawUsage);
+  const base = geo.attributes.position.array.slice();
+  // per-column constants (x never changes along a column): c = x0 / (width / 2) and radius * sqrt(1 - c * c)
+  const cols = geo.parameters.widthSegments + 1, colC = new Float64Array(cols), colR = new Float64Array(cols);
+  for (let ix = 0; ix < cols; ix++) { const c = base[ix * 3] / (r.width / 2); colC[ix] = c; colR[ix] = r.radius * Math.sqrt(Math.max(0, 1 - c * c)); }
   const mesh = new THREE.Mesh(geo, liquid);
-  mesh.userData = { ...r, base: geo.attributes.position.array.slice() };
+  mesh.userData = { ...r, base, colC, colR };
   stream.add(mesh);
   return mesh;
 });
-// wavy, tapering half-tube: recomputed on the CPU each frame (a few thousand vertices)
+// The same area-weighted vertex normals as BufferGeometry.computeVertexNormals() (same face order, same accumulation,
+// same normalisation), but on the raw typed arrays: about ten times cheaper than the generic accessor-based version.
+function ribbonNormals(geo) {
+  const p = geo.attributes.position.array, attr = geo.attributes.normal, n = attr.array, idx = geo.index.array;
+  n.fill(0);
+  for (let f = 0; f < idx.length; f += 3) {
+    const ia = idx[f] * 3, ib = idx[f + 1] * 3, ic = idx[f + 2] * 3;
+    const cbx = p[ic] - p[ib], cby = p[ic + 1] - p[ib + 1], cbz = p[ic + 2] - p[ib + 2];
+    const abx = p[ia] - p[ib], aby = p[ia + 1] - p[ib + 1], abz = p[ia + 2] - p[ib + 2];
+    const x = cby * abz - cbz * aby, y = cbz * abx - cbx * abz, z = cbx * aby - cby * abx;
+    n[ia] += x; n[ia + 1] += y; n[ia + 2] += z;
+    n[ib] += x; n[ib + 1] += y; n[ib + 2] += z;
+    n[ic] += x; n[ic + 1] += y; n[ic + 2] += z;
+  }
+  for (let i = 0; i < n.length; i += 3) {
+    const x = n[i], y = n[i + 1], z = n[i + 2], s = 1 / (Math.sqrt(x * x + y * y + z * z) || 1);
+    n[i] = x * s; n[i + 1] = y * s; n[i + 2] = z * s;
+  }
+  attr.needsUpdate = true;
+}
+// wavy, tapering half-tube, recomputed on the CPU each frame. Row by row: everything except x is constant along a grid row.
 function updateRibbon(mesh, t, m) {
-  const { base, width, radius, phase } = mesh.userData;
-  const H = MENU.streamHeight, pos = mesh.geometry.attributes.position, a = pos.array;
-  for (let i = 0; i < a.length; i += 3) {
-    const x0 = base[i], y0 = base[i + 1];
-    const d = -y0 / H, c = x0 / (width / 2);
+  const { base, phase, colC, colR } = mesh.userData;
+  const H = MENU.streamHeight, geo = mesh.geometry, pos = geo.attributes.position, a = pos.array, cols = colC.length;
+  for (let i = 0; i < a.length; ) {
+    const y0 = base[i + 1], d = -y0 / H;
     const grow = smooth(0, 0.14, d);                     // the ribbon starts as a point inside the body, no flat top edge
     const wave = 0.40 * Math.sin(y0 * 1.5 + t * 0.55 + phase) + 0.16 * Math.sin(y0 * 3.3 - t * 0.35 + phase * 1.7);
-    a[i] = (x0 * (1 - 0.35 * d) + wave * m) * grow;
-    a[i + 1] = y0;
-    const bulge = radius * Math.sqrt(Math.max(0, 1 - c * c)) * (0.7 + 0.3 * Math.sin(y0 * 2.2 + t * 0.4 + phase));
-    a[i + 2] = (bulge + 0.12 * Math.sin(y0 * 2.7 + t * 0.3 + phase) * c * m) * grow;
+    const kx = 1 - 0.35 * d, wm = wave * m;
+    const bulgeK = 0.7 + 0.3 * Math.sin(y0 * 2.2 + t * 0.4 + phase);
+    const twist = 0.12 * Math.sin(y0 * 2.7 + t * 0.3 + phase);
+    for (let ix = 0; ix < cols; ix++, i += 3) {
+      a[i] = (base[i] * kx + wm) * grow;
+      a[i + 1] = y0;
+      a[i + 2] = (colR[ix] * bulgeK + twist * colC[ix] * m) * grow;
+    }
   }
   pos.needsUpdate = true;
-  mesh.geometry.computeVertexNormals();
+  ribbonNormals(geo);
 }
 
 let textPlane = null;
-function buildHeadline() {
-  const T = MENU.text, size = 2048;
-  const cv = document.createElement('canvas'); cv.width = size; cv.height = size;
+const headlineFont = CONFIG.menu.text.font.replace(/\d+px/, '100px');
+let headlineFontOk = false;                              // false: drawn with a fallback face (the web font was late)
+function paintHeadline(cv) {
+  const T = MENU.text, size = cv.width;
   const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
   ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = T.font;
   if ('letterSpacing' in ctx) ctx.letterSpacing = '0.02em';
   const fontPx = parseFloat(T.font.match(/(\d+)px/)[1]);
   const lh = fontPx * T.lineHeight, total = lh * T.lines.length;
   T.lines.forEach((ln, i) => ctx.fillText(ln, size / 2, size / 2 - total / 2 + lh * (i + 0.5)));
+  headlineFontOk = document.fonts.check(headlineFont);
+}
+function buildHeadline() {
+  const T = MENU.text, size = 2048;
+  const cv = document.createElement('canvas'); cv.width = size; cv.height = size;
+  paintHeadline(cv);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
@@ -835,14 +951,28 @@ function buildHeadline() {
   textPlane.scale.setScalar(Math.min(1, camera.aspect));
   textPlane.visible = false;
   scene.add(textPlane);
+  renderer.initTexture(tex);             // upload the 2048px texture + mipmaps now (intro), not on the first frame the headline shows
+  // on a slow connection the headline is first baked with a fallback face: bake it again as soon as the real one is there
+  if (!headlineFontOk && document.fonts) {
+    const again = () => {
+      if (headlineFontOk || !document.fonts.check(headlineFont)) return;
+      paintHeadline(cv); tex.needsUpdate = true;
+      renderer.initTexture(tex);         // upload now, not on the first frame the headline shows (mid-melt)
+      document.fonts.removeEventListener('loadingdone', again);
+    };
+    document.fonts.addEventListener('loadingdone', again);
+    headlineLoad.then(again, () => {});    // 'loadingdone' is not dependable in every engine; the load promise is
+  }
 }
-const headlineFont = CONFIG.menu.text.font.replace(/\d+px/, '100px');
-Promise.race([document.fonts.load(headlineFont), new Promise(r => setTimeout(r, 3000))]).catch(() => {}).then(buildHeadline);
+const headlineLoad = document.fonts.load(headlineFont);
+Promise.race([headlineLoad, new Promise(r => setTimeout(r, 3000))]).catch(() => {}).then(buildHeadline);
 
 const tmpColor = new THREE.Color();
+let streamLive = false;                                  // the melt / stream is in motion: render every frame
 function updateMenuScene(t, g, c) {
   // g: liquid formed (0..1), c: pour amount (0..1): the stream pours down and fades while the next screen rises
-  stream.visible = g > 0.03 && c < 0.98;
+  streamLive = g > 0.03 && c < 0.98;
+  stream.visible = g > 0.18 && c < 0.95;                 // outside this range the liquid's opacity (below) is exactly 0
   if (stream.visible) {
     liquid.opacity = MENU.liquid.opacity * smooth(0.18, 0.7, g) * (1 - smooth(0.5, 0.95, c));   // the drips arrive, then the stream builds
     const flow = t + 3.0 * c;                              // runs faster while leaving
@@ -888,12 +1018,20 @@ const ChromaticAberrationShader = {
       gl_FragColor = vec4(c, a) / float(uTaps);
     }`,
 };
-const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+// Scene buffer: 4x MSAA + half float (the chrome highlights are far above 1.0 before tone mapping). Its depth is never read back.
+const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4, resolveDepthBuffer: false });
 const composer = new EffectComposer(renderer, target);
 composer.addPass(new RenderPass(scene, camera));
 const caPass = new ShaderPass(ChromaticAberrationShader);
 composer.addPass(caPass);
 composer.addPass(new OutputPass());
+// EffectComposer cloned `target`: the scene is always drawn into composer.readBuffer (the clone, still 4x MSAA), while
+// composer.writeBuffer (= `target`) only receives the full-screen aberration pass, where MSAA / depth cannot change a pixel.
+// True only while the buffers keep their roles, i.e. an even number of swapping passes per frame (today: aberration + output).
+if (composer.passes.filter(pass => pass.needsSwap).length % 2 === 0) {
+  composer.writeBuffer.samples = 0;
+  composer.writeBuffer.depthBuffer = false;
+}
 
 function resize3d() {
   const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -918,16 +1056,24 @@ function applyQuality() {
   resize3d();
 }
 applyQuality();
+try {                                   // same render-target state as the real frames, so the same shader variants
+  const rt = renderer.getRenderTarget();
+  renderer.setRenderTarget(composer.readBuffer);
+  renderer.compileAsync(scene, camera).catch(() => {});
+  renderer.setRenderTarget(rt);
+} catch (e) { /* older three / no parallel compile: warmUp3d() does it all */ }
 
 /* =========================================================================
    Ready / intro
    ========================================================================= */
 (async () => {
   try {
-    await Promise.race([document.fonts.load(fontString(100)), new Promise(r => setTimeout(r, 3000))]);
+    const heroLoad = document.fonts.load(fontString(100));
+    heroLoad.then(() => { if (layout.ready && heroMetrics() !== heroSig) relayout(); }, () => {});   // arrived after the timeout below: fit again
+    await Promise.race([heroLoad, new Promise(r => setTimeout(r, 3000))]);
   } catch (e) { /* fall back to whatever font is available */ }
   relayout();
-  const start = () => { document.body.classList.add('is-ready'); introStart = -2; };   // -2: start on the next frame
+  const start = () => { warmUp3d(); document.body.classList.add('is-ready'); introStart = -2; };   // -2: start on the next frame
   const wait = () => (logoReady ? start() : setTimeout(wait, 30));
   wait();
 })();
@@ -935,6 +1081,17 @@ applyQuality();
 /* =========================================================================
    Frame loop
    ========================================================================= */
+// Compile the menu-screen shaders and upload its buffers while the page is still fading in (canvas at opacity 0),
+// instead of stalling the first scroll into the melt.
+function warmUp3d() {
+  const now = performance.now();
+  try {
+    poseLogo(now);
+    stream.visible = true; if (textPlane) textPlane.visible = true;
+    composer.render();                   // throw-away frame through the same render targets, so the same shader variants
+    poseLogo(now); composer.render();    // put the correct frame back (poseLogo resets the visibility flags)
+  } catch (e) { console.warn('3D warm-up skipped', e); }
+}
 let last = performance.now();
 const B = CONFIG.baseRotation, T = CONFIG.tumble;
 const wave = (f, ph, p) => Math.sin(f * p + ph) - Math.sin(ph);   // smooth pseudo-random, zero at p = 0
@@ -981,6 +1138,18 @@ function poseLogo(now) {
   caPass.uniforms.uSmear.value = scroll.ab * CONFIG.aberration.smear;
 }
 
+// Draws the 3D scene, unless there is nothing in it: from the works screen on, the logo has melted and the stream has
+// poured away. Then one last, empty frame is drawn, the canvas is hidden and rendering stops (an invisible full post-processing
+// pass per frame, plus a big transparent layer for the browser to blend, was the main cost of the works / clients screens).
+let sceneOff = false;
+function renderScene(now) {
+  const p = scroll.current;
+  const empty = logoReady && menuGrow(p) >= 0.985 && pourAmount(p) >= 0.95;      // same thresholds as logo.visible / stream.visible
+  if (empty && sceneOff) return;
+  poseLogo(now);
+  composer.render();
+  if (empty !== sceneOff) { sceneOff = empty; canvas.style.visibility = empty ? 'hidden' : ''; }
+}
 function tick(now) {
   requestAnimationFrame(tick);
   frames++;
@@ -1005,26 +1174,44 @@ function tick(now) {
   mouse.y = damp(mouse.y, mouse.ty, 4, dt);
 
   // words + dust
+  const pmOpen = document.body.classList.contains('pm-open');
   if (layout.ready) {
     const { k, f } = wordState(scroll.current);
     if (moving || forceApply) { applyWords(k, f); updateCSS(); forceApply = false; }
-    if ((f > 0 && f < 1) || dustActive) drawDust(k, f, now / 1000);
-    if (clientsEl.classList.contains('is-on')) layoutRibbon(dt, now / 1000);
+    if (!pmOpen) {                                             // nothing below is visible under the opaque manager
+      if ((f > 0 && f < 1 && k < WORDS.length) || dustActive || dustShown) drawDust(k, f, now / 1000);
+      if (clientsEl.classList.contains('is-on')) layoutRibbon(dt, now / 1000);
+    }
   }
 
-  if (document.body.classList.contains('pm-open')) return;   // the manager covers the site: skip rendering
+  if (pmOpen) return;   // the manager covers the site: skip rendering
 
-  // adaptive quality: sustained slow frames step the 3D resolution down (remembered for next visits)
-  if (!document.hidden && now > 4000) {
-    QUALITY.ema += (dt * 1000 - QUALITY.ema) * 0.1;
-    if (QUALITY.ema > 26 && moving) { if (++QUALITY.slowFrames > 45 && QUALITY.tier < QUALITY.tiers.length - 1) { QUALITY.tier++; QUALITY.slowFrames = 0; localStorage.setItem('site.quality', QUALITY.tier); applyQuality(); } }
-    else QUALITY.slowFrames = Math.max(0, QUALITY.slowFrames - 1);
+  // Adaptive quality: sustained slow frames step the 3D resolution down. Judged only on scrolling frames where the 3D scene is
+  // the main load (before the works screen starts to rise), and a step down is kept (and remembered for a week) only if it
+  // measurably shortened those frames. Frame times are quantised to the display refresh, so one step may not show: every step
+  // is tried before deciding that the bottleneck is something else (a 30 fps power-saving cap, another app...). Then the tier
+  // is restored and adapting stops for this page load, so the logo never loses resolution for nothing.
+  if (!QUALITY.locked && moving && scroll.current < MENU.pour[0] && !document.hidden && introStart > 0 && now - introStart > 4000) {   // not while the page is still loading
+    const Q = QUALITY;
+    Q.ema += (dt * 1000 - Q.ema) * 0.1;
+    if (Q.probe) {
+      if (++Q.probe.n >= 90) {
+        if (Q.ema <= Q.probe.ema * 0.85) {                       // faster: but one window can simply be a lighter stretch of the page
+          if (++Q.probe.ok >= 2) { qStore.set(Q.tier); Q.probe = null; Q.slowFrames = 0; } else Q.probe.n = 0;
+        } else {
+          Q.probe.ok = 0;
+          if (Q.tier < Q.tiers.length - 1) { Q.tier++; Q.probe.n = 0; applyQuality(); }
+          else { Q.tier = Q.probe.from; Q.locked = true; Q.probe = null; applyQuality(); }
+        }
+      }
+    } else if (Q.ema > 26) {
+      if (++Q.slowFrames > 45 && Q.tier < Q.tiers.length - 1) { Q.probe = { from: Q.tier, ema: Q.ema, n: 0, ok: 0 }; Q.tier++; Q.slowFrames = 0; applyQuality(); }
+    } else Q.slowFrames = Math.max(0, Q.slowFrames - 1);
   }
   // at rest (no scroll, still mouse, no liquid stream) the idle wobble only needs 30 fps
-  const still = !moving && Math.abs(mouse.tx - mouse.x) < 0.002 && Math.abs(mouse.ty - mouse.y) < 0.002 && !stream.visible;
+  const still = !moving && Math.abs(mouse.tx - mouse.x) < 0.002 && Math.abs(mouse.ty - mouse.y) < 0.002 && !streamLive;
   if (still && frames % 2) return;
-  poseLogo(now);
-  composer.render();
+  renderScene(now);
 }
 requestAnimationFrame(tick);
 
@@ -1041,12 +1228,13 @@ window.__site = {
     const { k, f } = wordState(scroll.current);
     applyWords(k, f); updateCSS();
     if (layout.ready) { drawDust(k, f, performance.now() / 1000); if (clientsEl.classList.contains('is-on')) layoutRibbon(0.016, performance.now() / 1000); }
-    poseLogo(performance.now()); composer.render();
+    renderScene(performance.now());
     return { k, f };
   },
   // draws word i's particle home positions in red over the resting word (alignment check)
   debugHomes(i) {
     const W = layout.words[i]; if (!W) return 0;
+    dust.style.visibility = '';          // the canvas is hidden at rest; the next word change restores the normal state
     dctx.setTransform(layout.dpr, 0, 0, layout.dpr, 0, 0);
     dctx.clearRect(0, 0, layout.vw, layout.vh);
     dctx.fillStyle = '#ff0000'; dctx.globalAlpha = 1;
