@@ -298,6 +298,70 @@ overlay.querySelectorAll('.overlay-nav a').forEach((a, i) => {
 addEventListener('keydown', e => { if (e.key === 'Escape' && !document.body.classList.contains('pm-open')) setMenuOpen(false); });
 
 /* =========================================================================
+   Contact form. With RESEND_API_KEY set in Vercel, api/contact.js mails the message straight to the inbox;
+   until then (or if sending fails) the visitor's mail app opens with the message ready to send.
+   ========================================================================= */
+const CONTACT_EMAIL = 'd.silivanovych@gmail.com';
+const contactForm = document.querySelector('.contact-form');
+const formStatus = contactForm.querySelector('.form-status');
+const formButton = contactForm.querySelector('button[type="submit"]');
+const pageOpenedAt = performance.now();
+let directSend = null;                              // does /api/contact send by itself? null: not asked yet
+function askDirectSend() {
+  if (directSend !== null) return;
+  directSend = false;
+  fetch('/api/contact', { cache: 'no-store' })
+    .then(r => (r.ok ? r.json() : null))
+    .then(j => { directSend = !!(j && j.ready); })
+    .catch(() => {});
+}
+function mailtoHref({ name, email, project, message }) {
+  const subject = 'Project request' + (project ? ': ' + project : '') + (name ? ' (' + name + ')' : '');
+  const body = [`Name: ${name}`, `Email: ${email}`, ...(project ? [`Project: ${project}`] : []), '', message].join('\r\n');
+  return `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+function formSay(html, kind = '') { formStatus.innerHTML = html; formStatus.dataset.kind = kind; }
+contactForm.addEventListener('focusin', askDirectSend);
+contactForm.addEventListener('input', e => {
+  e.target.classList.remove('is-invalid');
+  if (formStatus.dataset.kind === 'error') formSay('');
+});
+contactForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  const el = contactForm.elements;
+  const d = { name: el.Name.value.trim(), email: el.Email.value.trim(), project: el.Project.value.trim(), message: el.Message.value.trim() };
+  const bad = [!d.name && el.Name, !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.email) && el.Email, !d.message && el.Message].filter(Boolean);
+  bad.forEach(f => f.classList.add('is-invalid'));
+  if (bad.length) {
+    bad[0].focus({ preventScroll: !matchMedia('(max-width: 640px)').matches });   // the hero never scrolls; on phones the contact screen does
+    formSay('Please add a name, a valid email and a message.', 'error');
+    return;
+  }
+  const mail = mailtoHref(d);
+  if (!directSend) {                                // no direct sending: the mail app, straight from the click
+    location.href = mail;
+    formSay(`Your mail app is opening with the message ready to send. Nothing opened? Write to <a href="${mail}">${CONTACT_EMAIL}</a>.`);
+    return;
+  }
+  formButton.disabled = true;
+  formSay('Sending…');
+  try {
+    const r = await fetch('/api/contact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...d, website: el.website.value, t: Math.round(performance.now() - pageOpenedAt) }),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    contactForm.reset();
+    formSay('Thank you! The message has been sent. A reply will follow soon.', 'ok');
+  } catch (err) {
+    formSay(`The message could not be sent right now. <a href="${mail}">Send it from your mail app</a> instead.`, 'error');
+  } finally {
+    formButton.disabled = false;
+  }
+});
+
+/* =========================================================================
    Works carousel: cards on a 3D arc, arrows / dots / drag / horizontal wheel / keys
    ========================================================================= */
 const carousel = document.getElementById('carousel');

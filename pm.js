@@ -395,7 +395,7 @@ function softRender() {
 function viewShell(me, tab, body) {
   const unread = store.totalUnread(me);
   const nav = [
-    ['projects', 'Projects', I.folder], ['tasks', 'My tasks', I.check], ['calendar', 'Calendar', I.calendar],
+    ['projects', 'Projects', I.folder], ['tasks', 'Tasks', I.check], ['calendar', 'Calendar', I.calendar],
     ...(me.role === 'owner' ? [['team', 'Team', I.team]] : []), ['messages', 'Messages', I.message], ['settings', 'Settings', I.settings],
   ];
   return `
@@ -459,7 +459,7 @@ function viewProjects(me) {
   if (filter === 'active') list = list.filter(p => p.status !== 'done');
   if (filter === 'review') list = list.filter(p => p.status === 'review');
   if (filter === 'done') list = list.filter(p => p.status === 'done');
-  return `<div class="pm-list-head"><h1 class="cond">${me.role === 'owner' ? 'All projects' : 'My projects'}</h1>
+  return `<div class="pm-list-head"><h1 class="cond">${me.role === 'owner' ? 'All projects' : 'Assigned projects'}</h1>
     <div class="pm-filters">${[['all', 'All'], ['active', 'Active'], ['review', 'Review'], ['done', 'Done']].map(([k, l]) => `<button data-action="filter" data-v="${k}" class="${filter === k ? 'is-active' : ''}">${l}</button>`).join('')}</div>
     ${me.role === 'owner' ? `<a class="btn dark" href="#manager/new">${I.plus} New project</a>` : ''}</div>
     <div class="pgrid" id="pm-pgrid">${list.length ? list.map(p => projectCard(me, p)).join('') : `<div class="empty">${me.role === 'owner' ? 'No projects yet. Create the first one.' : 'Nothing assigned to you yet.'}</div>`}</div>`;
@@ -467,7 +467,7 @@ function viewProjects(me) {
 function viewTasks(me) {
   const list = store.projects(me).filter(p => p.status !== 'done');
   const groups = STATUSES.slice(0, 4).map(([k, l]) => [l, list.filter(p => p.status === k)]).filter(g => g[1].length);
-  return `<div class="pm-list-head"><h1 class="cond">My tasks</h1></div>
+  return `<div class="pm-list-head"><h1 class="cond">Open tasks</h1></div>
     ${groups.length ? groups.map(([l, ps]) => `<h3 class="cond" style="position:relative;z-index:2;font-size:20px;margin:6px 0 10px;color:var(--pm-muted)">${l}</h3><div class="pgrid" style="margin-bottom:22px">${ps.map(p => projectCard(me, p)).join('')}</div>`).join('') : '<div class="empty">No open tasks.</div>'}`;
 }
 function viewEmpty(t) { return `<div class="empty">${esc(t)}</div>`; }
