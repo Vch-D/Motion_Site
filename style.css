@@ -299,16 +299,15 @@ body {
 .thumb { position: absolute; inset: 0; background: #222; }
 .thumb::before { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, .55)); }
 /* placeholder artwork: swap for real stills / videos */
-.thumb-1 { background: linear-gradient(180deg, #e4ebf2 0%, #a9bccd 45%, #4b5f74 75%, #22303d 100%); }
-.thumb-1::after { content: ''; position: absolute; left: -10%; right: -10%; bottom: 18%; height: 40%; background: linear-gradient(170deg, transparent 40%, #8fa4b8 41%, #5d7288 60%, transparent 61%), linear-gradient(190deg, transparent 45%, #c8d6e2 46%, #7f93a8 70%, transparent 71%); opacity: .8; }
-.thumb-2 { background: radial-gradient(circle at 62% 38%, #7a46bd 0%, #2a1a4d 45%, #100a1f 100%); }
-.thumb-2::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 28% 68%, rgba(255, 70, 130, .55), transparent 45%), radial-gradient(circle at 75% 30%, rgba(90, 200, 255, .5), transparent 35%); }
-.thumb-3 { background: linear-gradient(180deg, #f2f2f4 0%, #d9d9de 60%, #b9b9c1 100%); }
-.thumb-3::after { content: attr(data-text); position: absolute; left: 50%; top: 50%; transform: translate(-50%, -52%); font-family: 'Sofia Sans Extra Condensed', Impact, sans-serif; font-weight: 900; font-size: calc(var(--cw) * .36); line-height: 1; letter-spacing: -.01em; color: #0c0c0e; text-shadow: -.01em 0 .04em rgba(255, 110, 40, .55), .01em 0 .04em rgba(60, 170, 255, .55); }
-.thumb-4 { background: linear-gradient(180deg, #f6d3b3 0%, #e29a6a 40%, #8c4a48 75%, #3a2432 100%); }
-.thumb-4::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 50% 30%, rgba(255, 240, 210, .8), transparent 40%); }
-.thumb-5 { background: linear-gradient(135deg, #f6f6f9 0%, #8e909a 28%, #f1f1f5 48%, #4f515a 72%, #e6e6ec 100%); }
-.thumb-5::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 30% 60%, rgba(120, 140, 255, .35), transparent 50%), radial-gradient(ellipse at 70% 40%, rgba(255, 150, 90, .35), transparent 45%); }
+/* real works: a WebP poster per card (assets/works, loaded by main.js only near the active card) over a tiny inline
+   blurred copy (--ph) that shows until it arrives; the video itself lives in the viewer below and loads on Play only */
+.thumb { background: #16161a var(--ph, none) center / cover no-repeat; }
+.thumb .poster { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity .5s ease; }
+.thumb .poster.is-loaded { opacity: 1; }
+.thumb::before { z-index: 1; }
+.play, .meta { z-index: 2; }
+.dots.many { gap: 6px; }
+.dots.many button { width: 5px; height: 5px; }
 .play {
   position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px;
   border-radius: 50%; border: 0; background: rgba(255, 255, 255, .92); cursor: pointer;
@@ -339,6 +338,39 @@ body {
 .dots { display: flex; gap: 10px; }
 .dots button { width: 7px; height: 7px; border-radius: 50%; border: 0; padding: 0; background: rgba(0, 0, 0, .25); cursor: pointer; transition: transform .3s, background .3s; }
 .dots button.is-active { background: var(--ink); transform: scale(1.35); }
+/* ---------- work viewer: full-screen player opened from a card ---------- */
+.wv {
+  position: fixed; inset: 0; z-index: 25; display: none; background: rgba(6, 6, 8, .94); color: #fff;
+  font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; touch-action: none;
+}
+.wv.is-open { display: block; }
+.wv-stage {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -52%);
+  width: min(92vw, calc((100vh - 150px) * 16 / 9)); aspect-ratio: 16 / 9;
+  border-radius: 14px; overflow: hidden; background: #000; box-shadow: 0 40px 90px rgba(0, 0, 0, .6);
+}
+.wv-bg { position: absolute; inset: -6%; background: var(--ph, none) center / cover no-repeat; filter: blur(22px) brightness(.55); }   /* the tiny placeholder, blown up: a blurred backdrop for videos that are not 16:9 */
+.wv-stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: transparent; }
+.wv-cap { position: absolute; left: 50%; bottom: 5vh; transform: translateX(-50%); text-align: center; width: min(92vw, 900px); }
+.wv-cap b { display: block; font-size: 15px; font-weight: 600; letter-spacing: .02em; }
+.wv-cap .wv-s { display: block; margin-top: 4px; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; opacity: .6; }
+.wv-cap .wv-n { font-style: normal; font-weight: 400; opacity: .45; margin-right: 10px; }
+.wv-btn {
+  position: absolute; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .16);
+  background: rgba(255, 255, 255, .08); color: #fff; cursor: pointer; display: grid; place-items: center; transition: background .25s, transform .25s;
+}
+.wv-btn:hover { background: rgba(255, 255, 255, .18); transform: scale(1.06); }
+.wv-btn svg { width: 18px; height: 18px; }
+.wv-close { right: clamp(14px, 2.4vw, 34px); top: clamp(14px, 2.4vw, 34px); }
+.wv-prev { left: clamp(10px, 2vw, 30px); top: 50%; margin-top: -22px; }
+.wv-next { right: clamp(10px, 2vw, 30px); top: 50%; margin-top: -22px; }
+.wv-btn[disabled] { opacity: .25; pointer-events: none; }
+@media (max-width: 640px) {
+  .wv-stage { width: 100vw; border-radius: 0; transform: translate(-50%, -60%); }
+  .wv-prev, .wv-next { top: auto; bottom: 12vh; margin: 0; }
+  .wv-prev { left: 50%; margin-left: -70px; } .wv-next { right: 50%; margin-right: -70px; }
+  .wv-cap { bottom: 21vh; }
+}
 @media (max-width: 900px) {
   .works-side { display: none; }
   .works { --cw: clamp(200px, 60vw, 460px); }

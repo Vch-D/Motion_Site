@@ -367,13 +367,20 @@ contactForm.addEventListener('submit', async e => {
 const carousel = document.getElementById('carousel');
 const cards = [...document.querySelectorAll('.work')];
 const dotsEl = document.getElementById('dots');
-let active = Math.floor(cards.length / 2);
+let active = 0;                              // the works are sorted best first: open on the first one
 cards.forEach((_, i) => {
   const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', 'Project ' + (i + 1));
-  b.addEventListener('click', () => goTo(i)); dotsEl.appendChild(b);
+  b.addEventListener('click', () => goToCard(i)); dotsEl.appendChild(b);
 });
+dotsEl.classList.toggle('many', cards.length > 10);
 // Cards sit on one cylinder and the whole ring turns, so they can never cut through each other, even mid-turn.
+// With 15 cards or more the ring closes (theta = 360 / n, at most 24 degrees) and the carousel goes round and round:
+// the last card sits next to the first, and `active` counts turns without bounds (the card index is active mod n).
 const ARC = { theta: 14, chord: 0.98, scales: [1, 0.82, 0.62, 0.5, 0.42], dim: 0.12 };
+const RING_CLOSED = 360 / cards.length <= 24;
+if (RING_CLOSED) ARC.theta = 360 / cards.length;
+const cardIndex = i => ((i % cards.length) + cards.length) % cards.length;
+const ringDist = (i, a) => { const n = cards.length, d = Math.abs(cardIndex(i) - cardIndex(a)); return RING_CLOSED ? Math.min(d, n - d) : d; };
 const track = document.getElementById('carouselTrack');
 let cardW = 0;                               // measured once per layout (relayout), see measureClientWidth
 function measureCardWidth() {                // mirrors --cw in style.css (also resolves while the screen is hidden)
@@ -388,18 +395,49 @@ function layoutCarousel() {
   const R = cw * ARC.chord / (2 * Math.sin(ARC.theta * Math.PI / 360));          // ring radius from the wanted spacing
   track.style.transform = `translateZ(${(-R).toFixed(1)}px) rotateY(${(-active * ARC.theta).toFixed(2)}deg)`;
   cards.forEach((card, i) => {
-    const k = Math.abs(i - active);
+    const k = ringDist(i, active);
     const sc = ARC.scales[Math.min(k, ARC.scales.length - 1)];
     card.style.transform = `rotateY(${(i * ARC.theta).toFixed(2)}deg) translateZ(${R.toFixed(1)}px) scale(${sc})`;
-    card.style.opacity = (1 - k * ARC.dim).toFixed(2);
+    card.style.opacity = Math.max(0, 1 - k * ARC.dim).toFixed(2);
     card.classList.toggle('is-active', k === 0);
+    if (postersArmed && k <= 4) loadPoster(card);                                 // the ring shows about nine cards
   });
-  [...dotsEl.children].forEach((b, i) => b.classList.toggle('is-active', i === active));
+  [...dotsEl.children].forEach((b, i) => b.classList.toggle('is-active', i === cardIndex(active)));
 }
-function goTo(i) { active = clamp(i, 0, cards.length - 1); layoutCarousel(); }
+// Posters (assets/works/*.webp, ~40 KB each) are not in the HTML as src: the cards near the active one get theirs once
+// the page has loaded, the rest trickle in one by one when the browser is idle, and never on a data-saver connection.
+// Until a poster arrives the card shows its tiny blurred copy (--ph, inline in the HTML).
+let postersArmed = false;
+function loadPoster(card) {
+  if (card.dataset.posterLoaded) return;
+  card.dataset.posterLoaded = '1';
+  card.querySelectorAll('img.poster').forEach(img => {                            // the card and its mirror copy
+    img.addEventListener('load', () => img.classList.add('is-loaded'), { once: true });
+    img.src = img.dataset.src;
+  });
+}
+function armPosters() {
+  postersArmed = true;
+  layoutCarousel();
+  if (navigator.connection && navigator.connection.saveData) return;
+  const rest = cards.filter(c => !c.dataset.posterLoaded);
+  let i = 0;
+  const next = () => {
+    if (i >= rest.length) return;
+    const card = rest[i++], img = card.querySelector('img.poster');
+    img.addEventListener('load', () => setTimeout(next, 150), { once: true });
+    img.addEventListener('error', next, { once: true });
+    loadPoster(card);
+  };
+  (window.requestIdleCallback || (f => setTimeout(f, 1500)))(next);
+}
+if (document.readyState === 'complete') setTimeout(armPosters, 800); else addEventListener('load', () => setTimeout(armPosters, 800));
+function goTo(i) { active = RING_CLOSED ? i : clamp(i, 0, cards.length - 1); layoutCarousel(); }
+// a dot names a card: turn the shortest way round to it
+function goToCard(c) { const n = cards.length; let d = cardIndex(c) - cardIndex(active); if (RING_CLOSED && Math.abs(d) > n / 2) d -= Math.sign(d) * n; goTo(active + d); }
 document.querySelector('.cbtn.prev').addEventListener('click', () => goTo(active - 1));
 document.querySelector('.cbtn.next').addEventListener('click', () => goTo(active + 1));
-cards.forEach((card, i) => card.addEventListener('click', e => { if (i !== active) { e.preventDefault(); goTo(i); } }));
+cards.forEach((card, i) => card.addEventListener('click', e => { e.preventDefault(); if (i !== cardIndex(active)) goToCard(i); else if (!dragMoved) openWork(i); }));
 // drag / swipe
 let dragX = null, dragMoved = false;
 carousel.addEventListener('pointerdown', e => { e.preventDefault(); dragX = e.clientX; dragMoved = false; carousel.classList.add('is-dragging'); });
@@ -422,6 +460,58 @@ addEventListener('keydown', e => {
   if (document.body.classList.contains('pm-open') || !document.body.classList.contains('is-works')) return;
   if (e.key === 'ArrowRight') goTo(active + 1); else if (e.key === 'ArrowLeft') goTo(active - 1);
 });
+
+/* Work viewer: the card's video in a full-screen player. The file is fetched only here, on Play: assets/works/<slug>.mp4
+   (720p, ~1-2.5 Mb/s) or <slug>-sm.mp4 (480p, ~1 Mb/s) on a slow / data-saver connection or a phone-sized screen. */
+const wv = document.getElementById('wv');
+const wvVideo = document.getElementById('wvVideo');
+const wvTitle = wv.querySelector('.wv-t'), wvSub = wv.querySelector('.wv-s'), wvNum = wv.querySelector('.wv-n');
+const wvPrev = wv.querySelector('.wv-prev'), wvNext = wv.querySelector('.wv-next');
+let wvIndex = -1;
+function videoSrc(card) {
+  const c = navigator.connection || {};
+  const slow = !!c.saveData || /(^|-)2g$|^3g$/.test(c.effectiveType || '') || (c.downlink > 0 && c.downlink < 2.5);
+  return card.dataset.video + (slow || innerWidth <= 640 ? '-sm' : '') + '.mp4';
+}
+function openWork(i) {
+  if (RING_CLOSED) i = cardIndex(i);
+  const card = cards[i]; if (!card) return;
+  wvIndex = i;
+  const thumb = card.querySelector('.thumb'), poster = card.querySelector('img.poster');
+  wv.style.setProperty('--ph', thumb.style.getPropertyValue('--ph'));
+  wvVideo.poster = poster.dataset.src;
+  wvVideo.loop = card.dataset.loop === '1';
+  wvVideo.src = videoSrc(card);
+  wvNum.textContent = card.querySelector('.meta .num').textContent;
+  wvTitle.textContent = card.querySelector('.meta .ttl').firstChild.textContent;
+  wvSub.textContent = card.querySelector('.meta .ttl small').textContent;
+  wvPrev.disabled = !RING_CLOSED && i === 0; wvNext.disabled = !RING_CLOSED && i === cards.length - 1;
+  wv.classList.add('is-open'); document.body.classList.add('wv-open');
+  wvVideo.muted = false;
+  const p = wvVideo.play(); if (p && p.catch) p.catch(() => {});
+  if (i !== cardIndex(active)) goToCard(i);
+}
+function closeWork() {
+  if (wvIndex < 0) return;
+  wvIndex = -1;
+  wv.classList.remove('is-open'); document.body.classList.remove('wv-open');
+  wvVideo.pause(); wvVideo.removeAttribute('src'); wvVideo.load();               // let go of the file
+}
+wv.querySelector('.wv-close').addEventListener('click', closeWork);
+wvPrev.addEventListener('click', () => openWork(wvIndex - 1));
+wvNext.addEventListener('click', () => openWork(wvIndex + 1));
+wv.addEventListener('click', e => { if (e.target === wv || e.target.classList.contains('wv-cap')) closeWork(); });   // the dark area closes
+wv.addEventListener('wheel', e => e.preventDefault(), { passive: false });   // the page behind must not scroll
+wvVideo.addEventListener('ended', () => { if (!wvVideo.loop && (RING_CLOSED || wvIndex < cards.length - 1)) openWork(wvIndex + 1); });   // play on to the next work
+addEventListener('keydown', e => {
+  if (wvIndex < 0) return;
+  if (e.key === 'Escape') closeWork();
+  else if (e.key === 'ArrowRight') openWork(wvIndex + 1);
+  else if (e.key === 'ArrowLeft') openWork(wvIndex - 1);
+  else if (e.key === ' ' && document.activeElement !== wvVideo) { if (wvVideo.paused) wvVideo.play(); else wvVideo.pause(); }
+  else if (!['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+}, true);
 
 /* =========================================================================
    Words: sized to the screen, slide right-to-left, dissolve into dust
