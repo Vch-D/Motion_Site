@@ -49,8 +49,8 @@ Three.js и шрифты подгружаются с CDN.
   Восемь реальных клиентов (по статусу): FIBA, IIHF, HC Sparta Praha, Victoria VR, SBC Performance,
   SBC Digital, Go4Gold, Tradewise. У края ленты карточка плавно гаснет и проявляется с другой стороны
   (иначе на широком экране точка «склейки» кольца видна): opacity считается в `layoutRibbon` шагами по 2%.
-  Логотипы лежат в `assets/clients/` (SVG; IIHF и SBC Digital — PNG, Victoria VR — WebP с альфой,
-  вырезан из 4K-заставки ролика «Your AI agent», на сайте компании только GIF 480×70): FIBA — квадрат
+  Логотипы лежат в `assets/clients/` (SVG; IIHF и SBC Digital — PNG, Victoria VR — официальный вектор
+  `vvr-group-logo.svg` с victoriavr.com, буквы белые, «O» золотая): FIBA — квадрат
   из футера fiba.basketball, IIHF — щит с хоккеистом с медиасервера iihf.com + wordmark 2025 (Wikimedia
   Commons, белый) собраны в один PNG, Sparta и Tradewise вырезаны из брендбуков (PDF → SVG скриптом на
   PyMuPDF), SBC и Go4Gold (золотой слиток) — с их сайтов.
