@@ -402,20 +402,19 @@ body {
 .refl-mirror .client-info { backdrop-filter: none; -webkit-backdrop-filter: none; }   /* a blur layer inside the masked copy would force per-frame GPU masking */
 .client-art { position: absolute; inset: 0; transition: transform .6s cubic-bezier(.2, .7, .2, 1), filter .4s; }
 .client:hover .client-art, .client.is-open .client-art { transform: scale(1.06); filter: brightness(.7); }
-/* placeholder artwork: swap for real client visuals */
-.c-1 .client-art { background: radial-gradient(circle at 18% 42%, transparent 30%, rgba(255, 255, 255, .45) 31%, transparent 35%), radial-gradient(circle at 18% 42%, #3a4356 0, #171a22 35%, #07080b 75%); }
-.c-2 .client-art { background: repeating-linear-gradient(115deg, rgba(255, 255, 255, 0) 0 14px, rgba(0, 0, 0, .06) 14px 22px), linear-gradient(160deg, #ffffff 0%, #e2e2e7 45%, #f7f7f9 62%, #c8c8d0 100%); }
-.c-3 .client-art { background: linear-gradient(200deg, transparent 52%, #2a2a30 53%, #0d0d10 80%), linear-gradient(180deg, #24262c 0%, #0a0a0c 100%); }
-.c-4 .client-art { background: radial-gradient(circle at 72% 34%, transparent 24%, #d9dae0 25%, #6a6b74 30%, transparent 31%), radial-gradient(circle at 72% 34%, transparent 38%, #e9e9ee 39%, #83848d 43%, transparent 44%), linear-gradient(160deg, #f5f5f7 0%, #a8a9b1 100%); }
-.c-5 .client-art { background: repeating-radial-gradient(circle at 85% 110%, #1a1a1f 0 12px, #26262c 12px 24px), #111; }
-.c-6 .client-art { background: conic-gradient(from 200deg at 60% 45%, transparent 0 40%, rgba(120, 130, 160, .35) 40% 55%, transparent 55% 100%), linear-gradient(200deg, #fbfbfc 0%, #d6d7dd 55%, #f0f0f3 100%); }
-.c-7 .client-art { background: linear-gradient(118deg, transparent 52%, #3b404a 53%, #22262e 70%, transparent 71%), linear-gradient(180deg, #2c3038 0%, #0c0e12 65%); }
-.c-8 .client-art { background: radial-gradient(circle at 74% 38%, transparent 26%, rgba(255, 255, 255, .55) 27%, transparent 30%), radial-gradient(circle at 74% 38%, #2b2f3a 0, #0a0b0f 60%); }
+/* client logos: real brand files in assets/clients (SVG, one PNG); each card carries a brand-tinted background */
+.client-art { display: flex; align-items: center; justify-content: center; padding: 11% 13% 37%; box-sizing: border-box; }
+.client-logo { display: block; width: var(--lw, 60%); max-width: 100%; max-height: 100%; height: auto; object-fit: contain; pointer-events: none; user-select: none; -webkit-user-drag: none; }
+.c-fiba .client-art { background: radial-gradient(circle at 50% 28%, #1e2d44 0, #0c151d 62%); --lw: 52%; }
+.c-iihf .client-art { background: linear-gradient(165deg, #0b2f73 0%, #051e4b 46%, #03112b 100%); --lw: 72%; }
+.c-sparta .client-art { background: radial-gradient(circle at 50% 28%, rgba(252, 3, 79, .3) 0, transparent 58%), #000; --lw: 46%; }
+.c-sbcp .client-art { background: radial-gradient(circle at 18% 18%, rgba(185, 226, 0, .2) 0, transparent 48%), #0e0e0c; --lw: 72%; }
+.c-sbcd .client-art { background: radial-gradient(circle at 50% 32%, rgba(0, 150, 230, .3) 0, transparent 56%), linear-gradient(180deg, #071426 0%, #04101f 100%); --lw: 42%; }
+.c-g4g .client-art { background: radial-gradient(circle at 50% 28%, rgba(255, 200, 0, .22) 0, transparent 56%), #0d0c0a; --lw: 74%; }
+.c-tw .client-art { background: radial-gradient(circle at 62% 24%, rgba(20, 254, 177, .16) 0, transparent 50%), radial-gradient(circle at 30% 72%, rgba(239, 3, 97, .16) 0, transparent 50%), #0b0b11; --lw: 50%; }
 .client-face { position: absolute; left: 14px; right: 14px; bottom: 16px; color: #fff; transition: opacity .3s; }
-.client.light .client-face { color: var(--ink); }
 .client:hover .client-face, .client.is-open .client-face { opacity: 0; }
-.client-face .mark { display: block; font-style: normal; font-size: 15px; margin-bottom: 10px; }
-.client-face b { display: block; font-size: clamp(11px, 1.05vw, 15px); font-weight: 600; letter-spacing: .3em; text-transform: uppercase; }
+.client-face b { display: block; font-size: clamp(11px, 1.05vw, 15px); font-weight: 600; letter-spacing: .24em; text-transform: uppercase; }
 .client-face small { display: block; margin-top: 8px; font-size: clamp(7px, .62vw, 9px); letter-spacing: .22em; text-transform: uppercase; line-height: 1.6; opacity: .8; }
 .client-info {
   position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 14px 18px;

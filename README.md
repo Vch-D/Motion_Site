@@ -38,7 +38,12 @@ Three.js и шрифты подгружаются с CDN.
 - Седьмой экран — CLIENTS: веер вертикальных карточек клиентов с отражением. Лента сама медленно
   едет слева направо (`RIB.speed` в `main.js`), при наведении останавливается, у карточки поднимается
   панель с подробностями (на телефоне по тапу). Стрелки, точки, перетаскивание, клавиши влево/вправо.
-  Восемь плейсхолдеров: рисунки CSS-градиентами (`.c-1 … .c-8`), тексты в `index.html`.
+  Семь реальных клиентов (по статусу): FIBA, IIHF, HC Sparta Praha, SBC Performance, SBC Digital,
+  Go4Gold, Tradewise. Логотипы лежат в `assets/clients/` (SVG, у SBC Digital PNG): FIBA — квадрат из
+  футера fiba.basketball, IIHF — wordmark 2025 (Wikimedia Commons, перекрашен в белый), Sparta и
+  Tradewise вырезаны из брендбуков (PDF → SVG скриптом на PyMuPDF), SBC и Go4Gold — с их сайтов.
+  Фон карточки и размер лого — правила `.c-fiba … .c-tw` в `style.css` (`--lw` = ширина лого),
+  тексты карточек в `index.html` (описания пока черновые).
 - Восьмой экран — CONTACT: заголовок, слева «Get in touch» и три стеклянные карточки (Email
   d.silivanovych@gmail.com, Call +380 95 362 71 14, Location Prague — открывает Google Maps), справа форма.
   Ссылки Contact (в меню и сверху) быстро «роняют» страницу вниз, WORK и CLIENTS ведут на свои экраны.
