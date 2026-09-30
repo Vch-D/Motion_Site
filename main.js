@@ -236,13 +236,19 @@ function layoutRibbon(dt, t) {
     if (!rib.paused && t > rib.resumeAt) rib.target -= RIB.speed * dt;      // cards drift to the right
     rib.offset = damp(rib.offset, rib.target, 8, dt);
   }
-  const halfW = (layout.vw || innerWidth) / 2, cull = halfW + cw;
+  const halfW = (layout.vw || innerWidth) / 2, cull = halfW + cw, fadeW = S * 0.9;
   for (let i = 0; i < n; i++) {
     const card = clientCards[i];
     const x = (((i - rib.offset) * S) % L + L) % L - L / 2;                // wrap around the ring
     const hidden = Math.abs(x) > cull;
     if (card._hidden !== hidden) { card._hidden = hidden; card.style.visibility = hidden ? 'hidden' : ''; }
     if (hidden) continue;
+    // With few cards the ring is shorter than a wide screen, so the wrap point (x = ±L/2) is in view: a card would
+    // vanish at one edge and pop up at the other. It fades out over the last card width before the wrap and fades
+    // back in after it. Opacity is compositor-only on these layers (no paint), written in 2% steps.
+    const fade = Math.min(1, Math.max(0, (L / 2 - Math.abs(x)) / fadeW));
+    const o = Math.round(fade * fade * 50) / 50;
+    if (card._o !== o) { card._o = o; card.style.opacity = o === 1 ? '' : String(o); }
     const nx = x / halfW, near = Math.max(0, 1 - Math.abs(x) / S);
     card.style.transform = `translateX(${x.toFixed(1)}px) translateY(${(nx * nx * RIB.sag * cw).toFixed(1)}px) rotateY(${(-nx * RIB.yaw).toFixed(2)}deg) rotateZ(${(nx * RIB.tilt).toFixed(2)}deg) scale(${(1 + RIB.bump * near * near).toFixed(3)})`;
     // nearer the centre = on top. Ranked in half-card steps: the order between neighbours is the same as with a
