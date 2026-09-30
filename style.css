@@ -406,7 +406,7 @@ body {
 .client-art { display: flex; align-items: center; justify-content: center; padding: 11% 13% 37%; box-sizing: border-box; }
 .client-logo { display: block; width: var(--lw, 60%); max-width: 100%; max-height: 100%; height: auto; object-fit: contain; pointer-events: none; user-select: none; -webkit-user-drag: none; }
 .c-fiba .client-art { background: radial-gradient(circle at 50% 28%, #1e2d44 0, #0c151d 62%); --lw: 52%; }
-.c-iihf .client-art { background: linear-gradient(165deg, #0b2f73 0%, #051e4b 46%, #03112b 100%); --lw: 72%; }
+.c-iihf .client-art { background: linear-gradient(165deg, #0b2f73 0%, #051e4b 46%, #03112b 100%); --lw: 80%; }
 .c-sparta .client-art { background: radial-gradient(circle at 50% 28%, rgba(252, 3, 79, .3) 0, transparent 58%), #000; --lw: 46%; }
 .c-sbcp .client-art { background: radial-gradient(circle at 18% 18%, rgba(185, 226, 0, .2) 0, transparent 48%), #0e0e0c; --lw: 72%; }
 .c-sbcd .client-art { background: radial-gradient(circle at 50% 32%, rgba(0, 150, 230, .3) 0, transparent 56%), linear-gradient(180deg, #071426 0%, #04101f 100%); --lw: 42%; }

@@ -39,9 +39,10 @@ Three.js и шрифты подгружаются с CDN.
   едет слева направо (`RIB.speed` в `main.js`), при наведении останавливается, у карточки поднимается
   панель с подробностями (на телефоне по тапу). Стрелки, точки, перетаскивание, клавиши влево/вправо.
   Семь реальных клиентов (по статусу): FIBA, IIHF, HC Sparta Praha, SBC Performance, SBC Digital,
-  Go4Gold, Tradewise. Логотипы лежат в `assets/clients/` (SVG, у SBC Digital PNG): FIBA — квадрат из
-  футера fiba.basketball, IIHF — wordmark 2025 (Wikimedia Commons, перекрашен в белый), Sparta и
-  Tradewise вырезаны из брендбуков (PDF → SVG скриптом на PyMuPDF), SBC и Go4Gold — с их сайтов.
+  Go4Gold, Tradewise. Логотипы лежат в `assets/clients/` (SVG; IIHF и SBC Digital — PNG): FIBA — квадрат
+  из футера fiba.basketball, IIHF — щит с хоккеистом с медиасервера iihf.com + wordmark 2025 (Wikimedia
+  Commons, белый) собраны в один PNG, Sparta и Tradewise вырезаны из брендбуков (PDF → SVG скриптом на
+  PyMuPDF), SBC и Go4Gold (золотой слиток) — с их сайтов.
   Фон карточки и размер лого — правила `.c-fiba … .c-tw` в `style.css` (`--lw` = ширина лого),
   тексты карточек в `index.html` (описания пока черновые).
 - Восьмой экран — CONTACT: заголовок, слева «Get in touch» и три стеклянные карточки (Email
