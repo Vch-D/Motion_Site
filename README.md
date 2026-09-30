@@ -46,8 +46,11 @@ Three.js и шрифты подгружаются с CDN.
 - Седьмой экран — CLIENTS: веер вертикальных карточек клиентов с отражением. Лента сама медленно
   едет слева направо (`RIB.speed` в `main.js`), при наведении останавливается, у карточки поднимается
   панель с подробностями (на телефоне по тапу). Стрелки, точки, перетаскивание, клавиши влево/вправо.
-  Семь реальных клиентов (по статусу): FIBA, IIHF, HC Sparta Praha, SBC Performance, SBC Digital,
-  Go4Gold, Tradewise. Логотипы лежат в `assets/clients/` (SVG; IIHF и SBC Digital — PNG): FIBA — квадрат
+  Восемь реальных клиентов (по статусу): FIBA, IIHF, HC Sparta Praha, Victoria VR, SBC Performance,
+  SBC Digital, Go4Gold, Tradewise. У края ленты карточка плавно гаснет и проявляется с другой стороны
+  (иначе на широком экране точка «склейки» кольца видна): opacity считается в `layoutRibbon` шагами по 2%.
+  Логотипы лежат в `assets/clients/` (SVG; IIHF и SBC Digital — PNG, Victoria VR — WebP с альфой,
+  вырезан из 4K-заставки ролика «Your AI agent», на сайте компании только GIF 480×70): FIBA — квадрат
   из футера fiba.basketball, IIHF — щит с хоккеистом с медиасервера iihf.com + wordmark 2025 (Wikimedia
   Commons, белый) собраны в один PNG, Sparta и Tradewise вырезаны из брендбуков (PDF → SVG скриптом на
   PyMuPDF), SBC и Go4Gold (золотой слиток) — с их сайтов.
