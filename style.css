@@ -23,6 +23,7 @@
 @property --p { syntax: '<number>'; inherits: false; initial-value: 0; }
 @property --menu { syntax: '<number>'; inherits: false; initial-value: 0; }
 @property --contact { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --contact-shift { syntax: '<length>'; inherits: false; initial-value: 0px; }
 @property --works { syntax: '<number>'; inherits: false; initial-value: 0; }
 @property --works-in { syntax: '<number>'; inherits: false; initial-value: 0; }
 @property --works-out { syntax: '<number>'; inherits: false; initial-value: 0; }
@@ -40,14 +41,20 @@ body {
   overflow-x: hidden;
 }
 
-/* Scroll track: the hero is fixed on top of it. No snapping: the animation follows the scroll. */
+/* Scroll track: the hero is fixed on top of it. No snapping: the animation follows the scroll.
+   Sections are one small viewport (svh) each: that is what the progress is measured in. The last one is a large
+   viewport (lvh) plus whatever the contact screen does not fit (--contact-over, set by main.js), so the end of the
+   page is reachable whether a phone's toolbars are showing or not, and the contact screen slides up with the scroll. */
 .track { position: relative; z-index: 0; }
 .section { height: 100vh; height: 100svh; }
+.section:last-child { height: calc(100vh + var(--contact-over, 0px)); height: calc(100lvh + var(--contact-over, 0px)); }
+:root { --tb: 0px; }                                                   /* phone toolbar allowance: large minus small viewport */
+@supports (height: 100lvh) { :root { --tb: calc(100lvh - 100svh); } }
 
 /* ---------- hero ---------- */
 .hero {
   position: fixed; inset: 0;
-  height: 100vh; height: 100svh;
+  height: 100vh; height: 100lvh;
   z-index: 1; overflow: hidden;
   background: radial-gradient(70% 60% at 50% 46%, var(--bg-hi) 0%, var(--bg) 55%, var(--bg-lo) 100%);
 }
@@ -237,7 +244,7 @@ body {
 @keyframes nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(4px); } }
 @media (max-width: 640px) {
   .side-menu { gap: .9em; }
-  .note { top: auto; bottom: clamp(70px, 12vh, 110px); right: 20px; left: 20px; text-align: center; }
+  .note { top: auto; bottom: calc(clamp(70px, 12vh, 110px) + var(--tb)); right: 20px; left: 20px; text-align: center; }
   .scroll-down { display: none; }
 }
 
@@ -380,7 +387,7 @@ body {
   .works-kicker { top: 7vh; }
   .works-title { top: 8vh; }
   .carousel { top: 34vh; }
-  .carousel-nav { bottom: 16vh; }
+  .carousel-nav { bottom: calc(16vh + var(--tb)); }
   .works-foot-l, .works-foot-r { display: none; }
 }
 
@@ -465,7 +472,7 @@ body {
   .clients { --ccw: 44vw; }
   .clients-title { top: 8vh; }
   .ribbon { top: 36vh; }
-  .clients-nav { bottom: 12vh; }
+  .clients-nav { bottom: calc(12vh + var(--tb)); }
 }
 
 /* ---------- contact screen ---------- */
@@ -473,7 +480,7 @@ body {
   position: absolute; inset: 0; z-index: 5; display: none;
   font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; color: var(--ink);
   opacity: var(--contact);
-  transform: translateY(calc((1 - var(--contact)) * 50vh));
+  transform: translateY(calc((1 - var(--contact)) * 50vh - var(--contact-shift, 0px)));   /* --contact-shift: the part that does not fit, scrolled in by main.js */
   pointer-events: none;
 }
 .contact.is-on { display: block; }
@@ -551,10 +558,10 @@ body {
   .contact-grid { grid-template-columns: 1fr; gap: 24px; top: 42vh; left: 8vw; right: 8vw; }
 }
 @media (max-width: 640px) {
-  .contact { overflow-y: auto; }
   .contact-hint { display: none; }
   .contact-title { top: 5vh; }
-  .contact-grid { position: static; padding: 22vh 20px 40px; }
+  .contact-grid { position: static; padding: 22vh 20px calc(40px + var(--tb)); }
+  .contact-form input, .contact-form textarea { font-size: 16px; }   /* under 16px iOS zooms into a focused field */
 }
 
 /* ---------- film grain ---------- */
@@ -578,7 +585,8 @@ body {
 }
 @media (max-width: 640px) {
   .scroll-hint { display: none; }
+  .tagline { bottom: calc(clamp(26px, 6vh, 64px) + var(--tb)); }
 }
 @media (max-aspect-ratio: 1/1) {
-  .logo3d { width: 100vw; height: 100vh; height: 100svh; }   /* portrait: the stream needs the full height */
+  .logo3d { width: 100vw; height: 100vh; height: 100lvh; }   /* portrait: the stream needs the full height */
 }

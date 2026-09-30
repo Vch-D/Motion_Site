@@ -107,11 +107,17 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 window.scrollTo(0, 0);
 
 let sectionH = window.innerHeight;
+let contactContentH = 0;                                 // the contact screen's full height (relayout); taller than a phone
 const scroll = { target: 0, current: 0, vel: 0, ab: 0 };
 const readScroll = () => {
   if (window.__site && window.__site.lock) return;      // debug: hold a jumped state
-  const t = window.scrollY / sectionH;
+  const y = window.scrollY, t = y / sectionH;
   scroll.target = Number.isFinite(t) ? clamp(t, 0, LAST) : 0;
+  // past the last screen the page keeps scrolling by what the contact screen does not fit (the track is that much
+  // longer, see .section:last-child): that scroll slides the screen up, like ordinary page flow. innerHeight is read
+  // live because on a phone it changes with the toolbars, and the bottom must stay reachable either way.
+  const shift = clamp(y - LAST * sectionH, 0, Math.max(0, contactContentH - innerHeight));
+  setVar(contactEl, '--contact-shift', shift.toFixed(1) + 'px');
 };
 addEventListener('scroll', readScroll, { passive: true });
 
@@ -717,7 +723,7 @@ function relayout() {
     relayoutTimer = setTimeout(relayout, 250);
     return;
   }
-  layout.vw = innerWidth; layout.vh = innerHeight;
+  layout.vw = innerWidth; layout.vh = heroEl.clientHeight || innerHeight;   // the hero is a large viewport tall (100lvh): stable while a phone's toolbars come and go
   layout.dpr = Math.min(devicePixelRatio || 1, 1.5);
   heroBox = heroBoxNow();
   sectionH = sections[0].getBoundingClientRect().height || innerHeight || 1;
@@ -732,11 +738,22 @@ function relayout() {
   heroSig = heroMetrics();
   measureCardWidth(); measureClientWidth();
   layoutCarousel();
+  measureContact();
   layout.ready = true;
   readScroll();
   const { k, f } = wordState(scroll.current);
   applyWords(k, f); updateCSS();
   forceApply = true;
+}
+// The contact screen can be taller than the viewport (phones, short windows): the last track section grows by the
+// overflow (--contact-over) and readScroll slides the screen up by the scroll past the last screen.
+function measureContact() {
+  const off = !contactEl.classList.contains('is-on');
+  if (off) contactEl.style.display = 'block';           // display:none has no size
+  contactContentH = contactEl.scrollHeight;
+  if (off) contactEl.style.display = '';
+  const over = Math.max(0, contactContentH - heroEl.clientHeight);
+  sections[LAST].style.setProperty('--contact-over', over.toFixed(0) + 'px');
 }
 let forceApply = false;
 let resizeTimer = 0;
@@ -753,7 +770,7 @@ addEventListener('resize', () => {
 // back on the tab: measure again only if something changed meanwhile (a relayout rebuilds every particle)
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
-  if (!layout.ready || innerWidth !== layout.vw || innerHeight !== layout.vh || Math.min(devicePixelRatio || 1, 1.5) !== layout.dpr || heroMetrics() !== heroSig) relayout();
+  if (!layout.ready || innerWidth !== layout.vw || heroBoxNow() !== heroBox || heroMetrics() !== heroSig) relayout();
 });
 // fonts that arrive late (slow network) change the word widths: fit again. Only then: 'loadingdone' also fires for every
 // unrelated face or subset (a Greek glyph on a client card, Cyrillic in the manager), and a relayout rebuilds all the particles.
