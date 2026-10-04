@@ -183,3 +183,8 @@ Three.js и шрифты подгружаются с CDN.
 4. В Supabase → Authentication → URL Configuration → Site URL указать адрес сайта.
 
 Папки `source/`, `tools/` и README в деплой не попадают (`.vercelignore`).
+
+**Аналитика.** В `index.html` подключён сниппет Vercel Web Analytics
+(`/_vercel/insights/script.js`); посещения видны в Vercel → проект → вкладка Analytics
+(она должна быть включена кнопкой Enable). Менеджер проектов живёт на той же странице,
+поэтому отдельного кода для него не нужно.
